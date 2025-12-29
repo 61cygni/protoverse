@@ -16,9 +16,31 @@ import { VerseDag } from "./verse-dag.js";
 const stats = new Stats();
 document.body.appendChild(stats.dom);
 
-// Starting point
-let rootworld = "/worlds/cozyship/world.json";
-// let rootworld = "https://public-spz.t3.storage.dev/cozyship/world.json";
+// ========== URL Base Configuration ==========
+// Set to true to use CDN, false to use local files
+const USE_CDN = true;
+const URL_BASE = USE_CDN 
+    ? "https://public-spz.t3.storage.dev"
+    : "/worlds";
+
+/**
+ * Resolve a relative path to a full URL based on URL_BASE
+ * @param {string} relativePath - Path like "/cozyship/world.json"
+ * @returns {string} Full URL
+ */
+function resolveUrl(relativePath) {
+    // Remove leading slash if present (we'll add it back)
+    const cleanPath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    
+    // Ensure URL_BASE ends without slash
+    const base = URL_BASE.endsWith('/') ? URL_BASE.slice(0, -1) : URL_BASE;
+    
+    return `${base}/${cleanPath}`;
+}
+
+
+// Starting point (relative path - resolved when fetching)
+const rootworld = "/cozyship/world.json";
 // Track current world URL (to world.json)
 let currentWorldUrl = rootworld; // Track current world URL
 
@@ -97,7 +119,8 @@ async function loadWorldJSON(worldUrl) {
 } // loadWorldJSON
 
 // ========== DAG-Driven World Sync ==========
-const PRELOAD_HOPS = 1; // How many hops to preload
+const PRELOAD_HOPS = 2; // How many hops to preload
+const USE_URLS_FOR_LABELS = true; // If true, use URLs instead of names for portal labels
 
 /**
  * Sync loaded worlds based on DAG traversal from the new root
@@ -117,8 +140,9 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
     let rootNode = verseDag.getWorld(newRootUrl);
     if (!rootNode || !rootNode.worldData) {
         console.warn("rootNode not in DAG. This probably indicates a bug.");
-        console.log("Loading world data for root:", newRootUrl);
-        const worldData = await loadWorldJSON(newRootUrl);
+        const fetchUrl = newRootUrl.startsWith('http') ? newRootUrl : resolveUrl(newRootUrl);
+        console.log("Loading world data for root:", newRootUrl, "->", fetchUrl);
+        const worldData = await loadWorldJSON(fetchUrl);
         verseDag.loadWorldData(newRootUrl, worldData);
     }
     
@@ -131,8 +155,10 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
         
         for (const node of plan.worldsToLoad) {
             if (!node.worldData) {
-                console.log("Discovering world data for:", node.url);
-                const worldData = await loadWorldJSON(node.url);
+                // Resolve relative URL to full URL for fetching
+                const fetchUrl = node.url.startsWith('http') ? node.url : resolveUrl(node.url);
+                console.log("Discovering world data for:", node.url, "->", fetchUrl);
+                const worldData = await loadWorldJSON(fetchUrl);
                 verseDag.loadWorldData(node.url, worldData);
                 discoveredNew = true;
             }
@@ -203,30 +229,13 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
         // Load mesh if not already loaded
         if (!state.mesh) {
             console.log("Loading mesh for:", worldUrl, "worldno:", worldno);
-            const mesh = await loadSplatandSetPosition(worldData.splatUrl, [0, 0, 0], worldno);
+            // Resolve splatUrl to full URL if it's relative
+            const splatUrl = worldData.splatUrl.startsWith('http') 
+                ? worldData.splatUrl 
+                : resolveUrl(worldData.splatUrl);
+            const mesh = await loadSplatandSetPosition(splatUrl, [0, 0, 0], worldno);
             state.mesh = mesh;
             console.log("  Mesh position:", mesh.position.toArray());
-        }
-    }
-
-    // if previous root exists, let's patch up the label on the exit portal
-    if (previousRootUrl) {
-        console.log("We're coming from ", previousRootUrl);
-        const state = worldState.get(newRootUrl);
-        const previousRootState = worldState.get(previousRootUrl);
-        if (previousRootState) {
-            const previousRootPortal = previousRootState.portalPairs.find(p => p instanceof ProtoPortal && p.destinationUrl === newRootUrl);
-            if (previousRootPortal) {
-                console.log(previousRootState);
-                console.log(previousRootPortal);
-                const portalName = previousRootState.name;
-                previousRootPortal.updateLabelText(portalName);
-            }else{
-                // likely a persistant portal  of ours we just crossed back from
-                console.warn("Previous root portal not found for ", previousRootUrl);
-            }
-        }else{
-            console.warn("Previous root state not found for ", previousRootUrl);
         }
     }
 
@@ -249,19 +258,20 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
             continue;
         }
 
-        // Check if portal already exists
-        const existingPortal = sourceState.portalPairs.find(
-            p => p instanceof ProtoPortal && p.destinationUrl === destUrl
-        );
+        // Check if this exact portal already exists (same dest AND same start position)
+        // This allows multiple portals between the same two worlds at different positions
+        const startPos = portalData.start?.position;
+        const existingPortal = sourceState.portalPairs.find(p => {
+            if (!(p instanceof ProtoPortal) || p.destinationUrl !== destUrl) return false;
+            // Check if entry portal positions match
+            const existingPos = p.pair.entryPortal.position;
+            const adjustedStartPos = worldToUniverse(startPos, sourceState.worldno);
+            return Math.abs(existingPos.x - adjustedStartPos.x) < 0.01 &&
+                   Math.abs(existingPos.y - adjustedStartPos.y) < 0.01 &&
+                   Math.abs(existingPos.z - adjustedStartPos.z) < 0.01;
+        });
         if (existingPortal) {
-            console.log("Portal already exists:", sourceUrl, "->", destUrl);
-            console.log("  Existing portal exit pos:", existingPortal.pair.exitPortal.position.toArray());
-            console.log("  Dest state worldno:", destState.worldno);
-            console.log("  Dest mesh pos:", destState.mesh?.position?.toArray());
-
-            // go ahead and update label just in case it's one of ours we're returning from
-            existingPortal.updateLabelText(portalData.name);
-
+            console.log("Portal already exists:", sourceUrl, "->", destUrl, "at", startPos);
             continue;
         }
 
@@ -287,22 +297,40 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
         // Create ProtoPortal
         const protoPortal = new ProtoPortal(pair, destUrl, scene, portals);
         
-        // Create label (use portal name or destination URL)
-        const portalName = portalData.name || destUrl;
-        await protoPortal.createLabel(portalName, adjustedStartPos.toArray(), start.rotation);
+        // Create labels on both sides of the portal
+        // When using URLs for labels and CDN, prepend the CDN URL
+        const formatLabelUrl = (url) => {
+            if (USE_URLS_FOR_LABELS && USE_CDN) {
+                return URL_BASE + url;
+            }
+            return url;
+        };
+        const destLabelText = USE_URLS_FOR_LABELS 
+            ? formatLabelUrl(destUrl)
+            : (portalData.name || destState.name || destUrl);
+        const sourceLabelText = USE_URLS_FOR_LABELS 
+            ? formatLabelUrl(sourceUrl)
+            : (sourceState.name || sourceUrl);
+
+        console.log("Creating labels: ", destLabelText, " -> ", sourceLabelText);
+        console.log("  Dest state name:", destState.name);
+        console.log("  Source state name:", sourceState.name);
+        console.log("  Dest URL:", destUrl);
+        console.log("  Source URL:", sourceUrl);
+        console.log("  Portal data name:", portalData.name);
+        protoPortal.createLabels(destLabelText, sourceLabelText);
         
-        // Create ring
-        protoPortal.createRing(adjustedStartPos.toArray(), start.rotation, 1.0);
+        // Create rings on both sides of the portal
+        protoPortal.createRings(1.0);
 
         // Set up crossing callback
-        const fromName = sourceState.name;
         pair.onCross = async (pair, fromEntry) => {
             if (fromEntry) {
-                console.log(`Portal crossed: ${fromName} -> ${portalName}`);
+                console.log(`Portal crossed: ${sourceLabelText} -> ${destLabelText}`);
                 currentWorldUrl = destUrl;
                 await syncWorldsFromDag(destUrl, sourceUrl, pair);
             } else {
-                console.log(`Portal crossed (reverse): ${portalName} -> ${fromName}`);
+                console.log(`Portal crossed (reverse): ${destLabelText} -> ${sourceLabelText}`);
                 currentWorldUrl = sourceUrl;
                 await syncWorldsFromDag(sourceUrl, destUrl, pair);
             }
@@ -318,7 +346,8 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
 // Start of Execution Here 
 
 // Load initial world data for camera position, then use DAG to load everything
-const initialWorldData = await loadWorldJSON(rootworld);
+const rootworldFetchUrl = rootworld.startsWith('http') ? rootworld : resolveUrl(rootworld);
+const initialWorldData = await loadWorldJSON(rootworldFetchUrl);
 verseDag.loadWorldData(rootworld, initialWorldData);
 
 // Use DAG-driven sync for initial load

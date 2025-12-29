@@ -117,10 +117,20 @@ export class VerseDag {
     const sourceNode = this.addWorld(sourceUrl);
     const destNode = this.addWorld(destinationUrl);
 
-    // Check if edge already exists
-    const existingEdge = sourceNode.outgoingPortals.find(
-      e => e.destinationUrl === destinationUrl
-    );
+    // Check if this exact portal already exists (same source, dest, AND position)
+    // This allows multiple portals between the same two worlds at different positions
+    const existingEdge = sourceNode.outgoingPortals.find(e => {
+      if (e.destinationUrl !== destinationUrl) return false;
+      // If no portal data, check by URL only
+      if (!portalData || !e.portalData) return true;
+      // Check if start positions match (same portal)
+      const existingStart = e.portalData.start?.position;
+      const newStart = portalData.start?.position;
+      if (!existingStart || !newStart) return true;
+      return existingStart[0] === newStart[0] && 
+             existingStart[1] === newStart[1] && 
+             existingStart[2] === newStart[2];
+    });
     if (existingEdge) {
       return existingEdge;
     }
@@ -244,9 +254,20 @@ export class VerseDag {
         const node = this.nodes.get(url);
         if (node) {
           for (const edge of node.outgoingPortals) {
+            if(edge.portalData.name === '__stub'){
+              console.log(" - stub to ",edge.destinationUrl," skipping")
+              continue;
+            }
             const destDistance = distances.get(edge.destinationUrl);
             // Only include if destination is also within range
             if (destDistance !== undefined && destDistance <= preloadHops) {
+              portals.push(edge);
+            }
+          }
+          for (const edge of node.incomingPortals) {
+            const sourceDistance = distances.get(edge.sourceUrl);
+            // Only include if destination is also within range
+            if (sourceDistance !== undefined && sourceDistance <= preloadHops) {
               portals.push(edge);
             }
           }
@@ -281,6 +302,10 @@ export class VerseDag {
         // Add portals from this world to other worlds within range
         if (distance < preloadHops) {
           for (const edge of node.outgoingPortals) {
+            if(edge.portalData.name === '__stub'){
+              console.log(" - __stub portal to ",edge.destinationUrl,' skipping');
+              continue;
+            }
             const destDistance = distances.get(edge.destinationUrl);
             if (destDistance !== undefined && destDistance <= preloadHops) {
               portalsToSetup.push(edge);

@@ -1,17 +1,6 @@
 import * as THREE from "three";
-import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
-import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
-
-// Load font for text labels (promise-based)
-const fontLoader = new FontLoader();
-const fontPromise = new Promise((resolve, reject) => {
-  fontLoader.load(
-    "https://threejs.org/examples/fonts/helvetiker_regular.typeface.json",
-    resolve,
-    undefined,
-    reject
-  );
-});
+import { textSplats } from "@sparkjsdev/spark";
+import { SparkRing } from "./sparkring.js";
 
 export class ProtoPortal {
   constructor(portalPair, destinationUrl, scene, portals) {
@@ -19,119 +8,102 @@ export class ProtoPortal {
     this.destinationUrl = destinationUrl;
     this.scene = scene;
     this.portals = portals;
-    this.label = null;
-    this.ring = null;
+    this.entryLabel = null;  // Label on entry side (shows destination name)
+    this.exitLabel = null;   // Label on exit side (shows source name)
+    this.entryRing = null;   // Ring on entry side
+    this.exitRing = null;    // Ring on exit side
   }
 
-  async createLabel(worldName, position, rotation) {
-    // Remove existing label if it exists (prevent duplicates)
-    if (this.label) {
-      console.log("createLabel called when label already exists, removing old label");
-      this.scene.remove(this.label);
-      if (this.label.geometry) this.label.geometry.dispose();
-      if (this.label.material) this.label.material.dispose();
-      this.label = null;
-    }
+  /**
+   * Create labels on both sides of the portal
+   * @param {string} entryLabelText - Text shown on entry side (destination name)
+   * @param {string} exitLabelText - Text shown on exit side (source name)
+   */
+  createLabels(entryLabelText, exitLabelText) {
+    // Get positions and rotations from the portal pair
+    const entryPos = this.pair.entryPortal.position;
+    const entryRot = this.pair.entryPortal.quaternion;
+    const exitPos = this.pair.exitPortal.position;
+    const exitRot = this.pair.exitPortal.quaternion;
+
+    // Create entry label (shows where portal leads to)
+    this.entryLabel = this._createTextSplat(entryLabelText, entryPos, entryRot);
     
-    const font = await fontPromise;
+    // Create exit label (shows where you came from)
+    this.exitLabel = this._createTextSplat(exitLabelText, exitPos, exitRot);
+  }
 
-    const textGeometry = new TextGeometry(worldName, {
-      font: font,
-      size: 0.2,
-      depth: 0.02,
-      curveSegments: 8,
-      bevelEnabled: false,
+  _createTextSplat(text, position, quaternion) {
+    const textMesh = textSplats({
+      text: text,
+      font: "Arial",
+      fontSize: 60,
+      color: new THREE.Color(0xffffff),
     });
-
-    // Center the text horizontally
-    textGeometry.computeBoundingBox();
-    const centerOffsetX = -0.5 * (textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x);
-    textGeometry.translate(centerOffsetX, 0, 0);
-
-    const textMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-    });
-
-    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+    
+    // Scale to appropriate size (reduced by 50%)
+    textMesh.scale.setScalar(0.25 / 80);
     
     // Position above portal
-    textMesh.position.fromArray(position);
+    textMesh.position.copy(position);
     textMesh.position.y += 1.3;
     
-    // Apply same rotation as portal entry
-    textMesh.quaternion.fromArray(rotation);
+    // Apply same rotation as portal
+    textMesh.quaternion.copy(quaternion);
 
     this.scene.add(textMesh);
-    this.label = textMesh;
     return textMesh;
   }
 
-  createRing(position, rotation, radius = 1.0) {
-    // Create a torus (ring) geometry
-    const torusGeometry = new THREE.TorusGeometry(radius, 0.05, 16, 64);
+  updateLabelRotation(time) {
+    const rotationSpeed = 0.0005; // radians per millisecond
+    if (this.entryLabel) {
+      this.entryLabel.rotation.y = time * rotationSpeed;
+    }
+    if (this.exitLabel) {
+      this.exitLabel.rotation.y = time * rotationSpeed;
+    }
+  }
+
+  /**
+   * Create rings on both sides of the portal
+   * @param {number} radius - Radius of the rings (default 1.0)
+   */
+  createRings(radius = 1.0) {
+    // Get positions and rotations from the portal pair
+    const entryPos = this.pair.entryPortal.position;
+    const entryRot = this.pair.entryPortal.quaternion;
+    const exitPos = this.pair.exitPortal.position;
+    const exitRot = this.pair.exitPortal.quaternion;
+
+    // Create entry ring
+    this.entryRing = this._createRing(entryPos, entryRot, radius);
     
-    // Gold material with metallic look
-    const torusMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      metalness: 0.8,
-      roughness: 0.2,
-      emissive: 0xffd700,
-      emissiveIntensity: 0.3,
+    // Create exit ring
+    this.exitRing = this._createRing(exitPos, exitRot, radius);
+  }
+
+  _createRing(position, quaternion, radius) {
+    // Create a ring using procedural splats
+    const sparkRing = new SparkRing({
+      radius: radius,
+      tubeRadius: 0.05,
+      radialSegments: 64,
+      tubularSegments: 16,
+      color: new THREE.Color(0xffd700), // Gold color
+      opacity: 1.0
     });
 
-    const ring = new THREE.Mesh(torusGeometry, torusMaterial);
+    const ringMesh = sparkRing.getMesh();
     
     // Position at portal location
-    ring.position.fromArray(position);
+    ringMesh.position.copy(position);
     
     // Apply portal rotation
-    ring.quaternion.fromArray(rotation);
+    ringMesh.quaternion.copy(quaternion);
 
-    this.scene.add(ring);
-    this.ring = ring;
-    return ring;
-  }
-
-  updateLabelRotation(time) {
-    if (this.label) {
-      const rotationSpeed = 0.0005; // radians per millisecond
-      this.label.rotation.y = time * rotationSpeed;
-    }
-  }
-
-  async updateLabelText(newText) {
-    if (!this.label) return;
-    
-    // Save current position, rotation, and material
-    const position = this.label.position.clone();
-    const quaternion = this.label.quaternion.clone();
-    const material = this.label.material;
-    
-    // Remove old geometry
-    if (this.label.geometry) {
-      console.log("Disposing old geometry", this.label.geometry);
-      this.label.geometry.dispose();
-    }
-    
-    // Create new geometry with new text
-    const font = await fontPromise;
-    const textGeometry = new TextGeometry(newText, {
-      font: font,
-      size: 0.2,
-      depth: 0.02,
-      curveSegments: 8,
-      bevelEnabled: false,
-    });
-    
-    // Center the text horizontally
-    textGeometry.computeBoundingBox();
-    const centerOffsetX = -0.5 * (textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x);
-    textGeometry.translate(centerOffsetX, 0, 0);
-    
-    // Update the mesh with new geometry
-    this.label.geometry = textGeometry;
-    this.label.position.copy(position);
-    this.label.quaternion.copy(quaternion);
+    this.scene.add(ringMesh);
+    return sparkRing;
   }
 
   dispose() {
@@ -140,28 +112,38 @@ export class ProtoPortal {
       this.portals.removePortalPair(this.pair);
     }
 
-    // Remove and dispose label
-    if (this.label) {
-      this.scene.remove(this.label);
-      if (this.label.geometry) {
-        this.label.geometry.dispose();
+    // Remove and dispose entry label
+    if (this.entryLabel) {
+      this.scene.remove(this.entryLabel);
+      if (this.entryLabel.dispose) {
+        this.entryLabel.dispose();
       }
-      if (this.label.material) {
-        this.label.material.dispose();
-      }
-      this.label = null;
+      this.entryLabel = null;
     }
 
-    // Remove and dispose ring
-    if (this.ring) {
-      this.scene.remove(this.ring);
-      if (this.ring.geometry) {
-        this.ring.geometry.dispose();
+    // Remove and dispose exit label
+    if (this.exitLabel) {
+      this.scene.remove(this.exitLabel);
+      if (this.exitLabel.dispose) {
+        this.exitLabel.dispose();
       }
-      if (this.ring.material) {
-        this.ring.material.dispose();
-      }
-      this.ring = null;
+      this.exitLabel = null;
+    }
+
+    // Remove and dispose entry ring
+    if (this.entryRing) {
+      const ringMesh = this.entryRing.getMesh();
+      this.scene.remove(ringMesh);
+      this.entryRing.dispose();
+      this.entryRing = null;
+    }
+
+    // Remove and dispose exit ring
+    if (this.exitRing) {
+      const ringMesh = this.exitRing.getMesh();
+      this.scene.remove(ringMesh);
+      this.exitRing.dispose();
+      this.exitRing = null;
     }
   }
 }

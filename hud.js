@@ -1,5 +1,29 @@
 import * as THREE from "three";
+import Stats from "stats.js";
 import { universeToWorld } from "./coordinate-transform.js";
+
+// ========== Stats (FPS Graph) ==========
+let stats = null;
+
+/**
+ * Initialize HUD elements (stats FPS graph)
+ * @returns {Stats} Stats instance for use in animation loop
+ */
+export function initHud() {
+    stats = new Stats();
+    // Position stats FPS graph on the right side to avoid overlap with audio toggle
+    stats.dom.style.cssText = 'position: fixed; top: 10px; right: 10px;';
+    document.body.appendChild(stats.dom);
+    return stats;
+}
+
+/**
+ * Get the stats instance
+ * @returns {Stats} Stats instance
+ */
+export function getStats() {
+    return stats;
+}
 
 // ========== Position HUD ==========
 const hud = document.createElement("div");
@@ -123,16 +147,27 @@ function formatBuildTime(isoString) {
   });
 }
 
-export function updateHUD(camera, currentWorldUrl, worldno) {
+export function updateHUD(camera, protoVerse, rootworld = "/root/world.json") {
   // Update HUD with camera world position and orientation
   camera.getWorldPosition(worldPos);
   camera.getWorldQuaternion(worldQuat);
   euler.setFromQuaternion(worldQuat, 'YXZ');
   
+  // Get world information from protoVerse
+  const currentWorldUrl = protoVerse.getCurrentWorldUrl();
+  let worldno = 0;
+  const worldState = protoVerse.getWorldState();
+  if (currentWorldUrl) {
+    const currentState = worldState.get(currentWorldUrl);
+    if (currentState && currentState.worldno !== undefined) {
+      worldno = currentState.worldno;
+    }
+  }
+  
   // Calculate world position: transform from universe coordinates to world coordinates
   const worldPosVec = universeToWorld(worldPos, worldno);
   wpos.copy(worldPosVec);
   
-  hud.textContent = `pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}\nwpos: ${wpos.x.toFixed(2)}, ${wpos.y.toFixed(2)}, ${wpos.z.toFixed(2)}\nrot: ${euler.x.toFixed(2)}, ${euler.y.toFixed(2)}, ${euler.z.toFixed(2)}\nworld: ${currentWorldUrl} [${worldno}]\nbuild: ${formatBuildTime(PROTOVERSE_BUILD_TIME)}\nspark: ${formatBuildTime(SPARK_BUILD_TIME)}`;
+  hud.textContent = `pos: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}\nwpos: ${wpos.x.toFixed(2)}, ${wpos.y.toFixed(2)}, ${wpos.z.toFixed(2)}\nrot: ${euler.x.toFixed(2)}, ${euler.y.toFixed(2)}, ${euler.z.toFixed(2)}\nworld: ${currentWorldUrl || rootworld} [${worldno}]\nbuild: ${formatBuildTime(PROTOVERSE_BUILD_TIME)}\nspark: ${formatBuildTime(SPARK_BUILD_TIME)}`;
 }
 

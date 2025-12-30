@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { textSplats } from "@sparkjsdev/spark";
 import { SparkRing } from "./sparkring.js";
-import { SparkDisk } from "./sparkdisk.js";
+import { SparkDisk, PortalEffects } from "./sparkdisk.js";
+
+// Re-export for convenience
+export { PortalEffects };
 
 export class ProtoPortal {
   constructor(portalPair, destinationUrl, scene, portals) {
@@ -21,8 +24,13 @@ export class ProtoPortal {
    * Create labels on both sides of the portal
    * @param {string} entryLabelText - Text shown on entry side (destination name)
    * @param {string} exitLabelText - Text shown on exit side (source name)
+   * @param {boolean} enabled - Whether to create labels (default true)
    */
-  createLabels(entryLabelText, exitLabelText) {
+  createLabels(entryLabelText, exitLabelText, enabled = true) {
+    if (!enabled) {
+      return;
+    }
+    
     // Get positions and rotations from the portal pair
     const entryPos = this.pair.entryPortal.position;
     const entryRot = this.pair.entryPortal.quaternion;
@@ -113,8 +121,12 @@ export class ProtoPortal {
    * Create disks on both sides of the portal (for VR mode)
    * Disks are created hidden and should be shown when in VR
    * @param {number} radius - Radius of the disks (default 1.0)
+   * @param {string} effect - Effect type from PortalEffects (default 'swirl')
    */
-  createDisks(radius = 1.0) {
+  createDisks(radius = 1.0, effect = PortalEffects.SWIRL) {
+    // Store the effect type for later reference
+    this.diskEffect = effect;
+    
     // Get positions and rotations from the portal pair
     const entryPos = this.pair.entryPortal.position;
     const entryRot = this.pair.entryPortal.quaternion;
@@ -122,23 +134,24 @@ export class ProtoPortal {
     const exitRot = this.pair.exitPortal.quaternion;
 
     // Create entry disk
-    this.entryDisk = this._createDisk(entryPos, entryRot, radius);
+    this.entryDisk = this._createDisk(entryPos, entryRot, radius, effect);
     
     // Create exit disk
-    this.exitDisk = this._createDisk(exitPos, exitRot, radius);
+    this.exitDisk = this._createDisk(exitPos, exitRot, radius, effect);
     
     // Start hidden (only shown in VR mode)
     this.setDisksVisible(false);
   }
 
-  _createDisk(position, quaternion, radius) {
+  _createDisk(position, quaternion, radius, effect) {
     // Create a disk using procedural splats
     const sparkDisk = new SparkDisk({
       radius: radius,
       radialSegments: 32,
       concentricRings: 16,
       color: new THREE.Color(0x000000), // Black color
-      opacity: 1.0
+      opacity: 1.0,
+      effect: effect
     });
 
     const diskMesh = sparkDisk.getMesh();
@@ -151,6 +164,20 @@ export class ProtoPortal {
 
     this.scene.add(diskMesh);
     return sparkDisk;
+  }
+
+  /**
+   * Change the effect type for both disks
+   * @param {string} effect - Effect type from PortalEffects
+   */
+  setDiskEffect(effect) {
+    this.diskEffect = effect;
+    if (this.entryDisk) {
+      this.entryDisk.setEffect(effect);
+    }
+    if (this.exitDisk) {
+      this.exitDisk.setEffect(effect);
+    }
   }
 
   /**

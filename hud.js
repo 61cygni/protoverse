@@ -18,6 +18,85 @@ hud.style.cssText = `
 `;
 document.body.appendChild(hud);
 
+// ========== Audio Toggle Button ==========
+let audioEnabled = true; // Default to audio on
+let audioToggleCallback = null; // Callback function when audio is toggled
+
+/**
+ * Create audio toggle button in upper left
+ * @param {Function} onToggle - Callback function called when audio is toggled (receives new state: boolean)
+ */
+export function createAudioToggleButton(onToggle) {
+    audioToggleCallback = onToggle;
+    
+    const button = document.createElement("button");
+    button.id = "audio-toggle";
+    button.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.7);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-radius: 50%;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        z-index: 1001;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    `;
+    button.addEventListener("click", () => {
+        audioEnabled = !audioEnabled;
+        updateAudioToggleButton();
+        if (audioToggleCallback) {
+            audioToggleCallback(audioEnabled);
+        }
+    });
+    button.addEventListener("mouseenter", () => {
+        button.style.background = "rgba(0, 0, 0, 0.9)";
+        button.style.borderColor = "rgba(255, 255, 255, 0.8)";
+    });
+    button.addEventListener("mouseleave", () => {
+        button.style.background = "rgba(0, 0, 0, 0.7)";
+        button.style.borderColor = "rgba(255, 255, 255, 0.5)";
+    });
+    
+    updateAudioToggleButton(button);
+    document.body.appendChild(button);
+}
+
+/**
+ * Update the audio toggle button icon
+ */
+function updateAudioToggleButton(button = null) {
+    const btn = button || document.getElementById("audio-toggle");
+    if (!btn) return;
+    
+    // Use Unicode symbols for audio icons
+    // 🔊 = speaker with sound, 🔇 = muted speaker
+    btn.textContent = audioEnabled ? "🔊" : "🔇";
+    btn.title = audioEnabled ? "Audio: ON (click to mute)" : "Audio: OFF (click to unmute)";
+}
+
+/**
+ * Get current audio enabled state
+ */
+export function getAudioEnabled() {
+    return audioEnabled;
+}
+
+/**
+ * Set audio enabled state (updates button icon)
+ */
+export function setAudioEnabled(enabled) {
+    audioEnabled = enabled;
+    updateAudioToggleButton();
+}
+
 const worldPos = new THREE.Vector3();
 const worldQuat = new THREE.Quaternion();
 const euler = new THREE.Euler();

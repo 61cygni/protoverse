@@ -6,8 +6,9 @@ import {
   SparkXr,
 } from "@sparkjsdev/spark";
 import Stats from "stats.js";
-import { updateHUD } from "./hud.js";
-import { ProtoPortal, setupPortalLighting } from "./port.js";
+import { updateHUD, createAudioToggleButton } from "./hud.js";
+import { initAudio, playWorldAudio, handleAudioToggle, setCurrentWorldData } from "./audio.js";
+import { ProtoPortal, setupPortalLighting, PortalEffects } from "./port.js";
 import { worldNoAllocator } from "./worldno.js";
 import { WorldState } from "./world-state.js";
 import { worldToUniverse } from "./coordinate-transform.js";
@@ -16,6 +17,8 @@ import { updateDiskAnimation } from "./sparkdisk.js";
 
 // ========== Setup ==========
 const stats = new Stats();
+// Position stats FPS graph on the right side to avoid overlap with audio toggle
+stats.dom.style.cssText = 'position: fixed; top: 10px; right: 10px;';
 document.body.appendChild(stats.dom);
 
 // ========== URL Base Configuration ==========
@@ -42,9 +45,12 @@ function resolveUrl(relativePath) {
 
 
 // Starting point (relative path - resolved when fetching)
-const rootworld = "/cozyship/world.json";
+const rootworld = "/root/world.json";
 // Track current world URL (to world.json)
 let currentWorldUrl = rootworld; // Track current world URL
+
+// Initialize audio module with URL resolver
+initAudio(resolveUrl);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
@@ -115,13 +121,20 @@ async function loadSplatandSetPosition(url, position = [0, 0, 0], world = 0) {
 
 async function loadWorldJSON(worldUrl) {
     console.log("loadWorldJSON:", worldUrl);
-    const response = await fetch(worldUrl);
+    // Use cache: 'reload' to force a fresh fetch and bypass browser cache
+    // This ensures we always get the latest world.json from the server
+    const response = await fetch(worldUrl, {
+        cache: 'reload'
+    });
+    console.log("response:", response);
     const worlddata = await response.json();
+    console.log("worlddata:", worlddata);
     return worlddata;
 } // loadWorldJSON
 
 // ========== DAG-Driven World Sync ==========
 const PRELOAD_HOPS = 2; // How many hops to preload
+const SHOW_PORTAL_LABELS = false; // If true, show floating labels above portals
 const USE_URLS_FOR_LABELS = true; // If true, use URLs instead of names for portal labels
 
 /**
@@ -320,13 +333,13 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
         console.log("  Dest URL:", destUrl);
         console.log("  Source URL:", sourceUrl);
         console.log("  Portal data name:", portalData.name);
-        protoPortal.createLabels(destLabelText, sourceLabelText);
+        protoPortal.createLabels(destLabelText, sourceLabelText, SHOW_PORTAL_LABELS);
         
         // Create rings on both sides of the portal
-        protoPortal.createRings(1.0);
+        //protoPortal.createRings(1.0);
         
         // Create disks for VR mode (hidden by default, shown when in VR)
-        protoPortal.createDisks(1.0);
+        protoPortal.createDisks(1.0, PortalEffects.WAVE);
 
         // Set up crossing callback
         pair.onCross = async (pair, fromEntry) => {
@@ -334,10 +347,24 @@ async function syncWorldsFromDag(newRootUrl, previousRootUrl, portalPair ) {
                 console.log(`Portal crossed: ${sourceLabelText} -> ${destLabelText}`);
                 currentWorldUrl = destUrl;
                 await syncWorldsFromDag(destUrl, sourceUrl, pair);
+                
+                // Get world data and play audio if available
+                const destNode = verseDag.getWorld(destUrl);
+                if (destNode && destNode.worldData) {
+                    setCurrentWorldData(destNode.worldData);
+                    playWorldAudio(destNode.worldData);
+                }
             } else {
                 console.log(`Portal crossed (reverse): ${destLabelText} -> ${sourceLabelText}`);
                 currentWorldUrl = sourceUrl;
                 await syncWorldsFromDag(sourceUrl, destUrl, pair);
+                
+                // Get world data and play audio if available
+                const sourceNode = verseDag.getWorld(sourceUrl);
+                if (sourceNode && sourceNode.worldData) {
+                    setCurrentWorldData(sourceNode.worldData);
+                    playWorldAudio(sourceNode.worldData);
+                }
             }
         };
 
@@ -361,6 +388,13 @@ await syncWorldsFromDag(rootworld, null, null);
 // Set initial camera position from world data
 localFrame.position.fromArray(initialWorldData.position);
 localFrame.quaternion.fromArray(initialWorldData.rotation);
+
+// Play initial world's background audio if available
+setCurrentWorldData(initialWorldData);
+playWorldAudio(initialWorldData);
+
+// Create audio toggle button (in HUD)
+createAudioToggleButton(handleAudioToggle);
 
 // ========== Controls ==========
 const controls = new SparkControls({

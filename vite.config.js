@@ -28,7 +28,7 @@ export default defineConfig({
     open: true
   },
   // Disable public directory copy during build (assets are on CDN)
-  publicDir: false,
+  //publicDir: false,
   build: {
     // Target ES2022 to support top-level await
     target: 'es2022',

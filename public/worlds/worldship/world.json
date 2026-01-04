@@ -1,7 +1,9 @@
 {
   "name": "World Ship",
   "splatUrl": "/worldship/splats/worldship-lod-0.spz",
+  "collisionUrl": "/worldship/worldship2.glb",
   "portals": [
+  
   ]
 }
 

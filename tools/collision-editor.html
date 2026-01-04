@@ -181,7 +181,7 @@
       <h3 onclick="toggleSection(this)">1. Load File</h3>
       <div class="group-content">
         <button class="btn" onclick="document.getElementById('file-input').click()">Load .spz / .glb file</button>
-        <input type="file" id="file-input" accept=".spz,.ply,.splat,.glb,.gltf" style="display:none">
+        <input type="file" id="file-input" accept=".spz,.ply,.splat,.glb,.gltf,.gz" style="display:none">
         <div id="splat-stats" style="margin-top: 8px;">
           <div class="stats-row"><span class="label">Splats:</span> <span class="value" id="stat-splats">-</span></div>
         </div>
@@ -219,7 +219,7 @@
       <div class="group-content">
         <div class="prop-row">
           <label>Voxel Resolution <span class="value" id="voxel-res-value">50</span></label>
-          <input type="range" id="voxel-resolution" min="20" max="500" value="50" oninput="updateVoxelRes()">
+          <input type="range" id="voxel-resolution" min="20" max="1000" value="50" oninput="updateVoxelRes()">
         </div>
         <div class="prop-row">
           <label>Fill Radius <span class="value" id="fill-radius-value">2.0</span></label>
@@ -259,16 +259,15 @@
     </div>
     
     <div class="toolbar-group">
-      <h3 onclick="toggleSection(this)">5. Erase Tool</h3>
+      <h3 onclick="toggleSection(this)">5. Select & Delete</h3>
       <div class="group-content">
         <div class="toggle-row">
-          <input type="checkbox" id="erase-mode" onchange="toggleEraseMode()">
-          <label for="erase-mode">Enable Erase Mode</label>
+          <input type="checkbox" id="select-mode" onchange="toggleSelectMode()">
+          <label for="select-mode">Enable Select Mode</label>
         </div>
-        <div class="prop-row">
-          <label>Eraser Size <span class="value" id="eraser-size-value">0.1</span></label>
-          <input type="range" id="eraser-size" min="0.01" max="0.3" step="0.01" value="0.1" oninput="updateEraserSize()">
-        </div>
+        <div class="stats-row"><span class="label">Selected:</span> <span class="value" id="stat-selected">0</span> triangles</div>
+        <button class="btn" onclick="deleteSelected()" id="delete-btn" disabled>Delete Selected (Del)</button>
+        <button class="btn" onclick="clearSelection()">Clear Selection</button>
       </div>
     </div>
     
@@ -312,7 +311,7 @@
   </div>
   
   <div id="status">
-    <span class="hint">Controls:</span> SparkControls (click/drag + WASD). Drop .spz for splat→mesh conversion, or .glb for mesh editing.
+    <span class="hint">Controls:</span> SparkControls (click/drag + WASD). Drop .spz/.gz for splat→mesh, or .glb for editing. Select mode: click triangles, Delete to remove.
   </div>
 
   <script type="importmap">
@@ -326,10 +325,24 @@
   </script>
   
   <script type="module">
+    // Global error handler
+    window.onerror = (msg, url, line, col, error) => {
+      console.error('[GLOBAL ERROR]', msg, 'at', url, line, col, error);
+    };
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('[UNHANDLED PROMISE REJECTION]', e.reason);
+    });
+    
+    console.log('[DEBUG] Script starting...');
+    
     import * as THREE from 'three';
     import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { SplatMesh, SparkControls } from '@sparkjsdev/spark';
+    
+    console.log('[DEBUG] collision-editor.html script loaded!');
+    console.log('[DEBUG] THREE:', THREE);
+    console.log('[DEBUG] SplatMesh:', SplatMesh);
     
     // ========== Scene Setup ==========
     const container = document.getElementById('canvas-container');
@@ -391,11 +404,10 @@
     let edgesHelper = null; // EdgesHelper for edge overlay
     let verticesCloud = null; // Points for vertex visualization
     
-    // ========== Eraser State ==========
-    let eraserMode = false;
-    let eraserSize = 0.1;
-    let eraserSphere = null;
-    let isErasing = false;
+    // ========== Select & Delete State ==========
+    let selectMode = false;
+    let selectedTriangles = new Set(); // Set of triangle indices (i/3 where i is index into index buffer)
+    let highlightMesh = null; // Mesh to show selected triangles
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     
@@ -408,26 +420,7 @@
     let patchDistance = 0.25;
     let patchPlane = null;
     
-    // Create eraser sphere (initially hidden)
-    const eraserGeometry = new THREE.SphereGeometry(1, 16, 16);
-    const eraserMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff4444,
-      transparent: true,
-      opacity: 0.3,
-      depthTest: true,
-      depthWrite: false
-    });
-    eraserSphere = new THREE.Mesh(eraserGeometry, eraserMaterial);
-    eraserSphere.visible = false;
-    eraserSphere.scale.setScalar(eraserSize); // Set initial size
-    scene.add(eraserSphere);
-    
-    // Add wireframe outline to eraser sphere for better visibility
-    const eraserWireframe = new THREE.LineSegments(
-      new THREE.WireframeGeometry(eraserGeometry),
-      new THREE.LineBasicMaterial({ color: 0xff0000, opacity: 0.8, transparent: true })
-    );
-    eraserSphere.add(eraserWireframe);
+    // Highlight mesh for selected triangles (created dynamically)
     
     // Create patch plane (initially hidden)
     const patchGeometry = new THREE.PlaneGeometry(1, 1);
@@ -477,15 +470,33 @@
     });
     
     document.addEventListener('drop', async (e) => {
+      console.log('[DEBUG] Drop event fired!');
       e.preventDefault();
       e.stopPropagation();
+      
+      console.log('[DEBUG] dataTransfer:', e.dataTransfer);
+      console.log('[DEBUG] files:', e.dataTransfer.files);
+      console.log('[DEBUG] files.length:', e.dataTransfer.files.length);
+      
       const file = e.dataTransfer.files[0];
+      console.log('[DEBUG] First file:', file);
+      
       if (file) {
+        console.log('[DEBUG] File name:', file.name);
+        console.log('[DEBUG] File size:', file.size, 'bytes (', (file.size / 1024 / 1024).toFixed(2), 'MB)');
+        
         if (file.name.endsWith('.glb') || file.name.endsWith('.gltf')) {
+          console.log('[DEBUG] Detected GLB/GLTF, calling loadGLBFile...');
           await loadGLBFile(file);
-        } else if (file.name.endsWith('.spz') || file.name.endsWith('.ply') || file.name.endsWith('.splat')) {
+        } else if (file.name.endsWith('.spz') || file.name.endsWith('.ply') || file.name.endsWith('.splat') || file.name.endsWith('.gz')) {
+          console.log('[DEBUG] Detected splat file, calling loadSplatFile...');
           await loadSplatFile(file);
+        } else {
+          console.log('[DEBUG] Unknown file extension:', file.name);
+          setStatus('Error: Unsupported file type. Use .spz, .ply, .splat, .gz, .glb, or .gltf');
         }
+      } else {
+        console.log('[DEBUG] No file in drop event');
       }
     });
     
@@ -503,61 +514,105 @@
     async function loadSplatFile(file) {
       try {
         setStatus('Loading splat file...');
-        console.log('Loading:', file.name, file.size, 'bytes');
+        console.log('[DEBUG] === SPLAT LOAD START ===');
+        console.log('[DEBUG] File name:', file.name);
+        console.log('[DEBUG] File size:', file.size, 'bytes');
+        console.log('[DEBUG] File type:', file.type);
         
+        console.log('[DEBUG] Reading file as ArrayBuffer...');
         const arrayBuffer = await file.arrayBuffer();
+        console.log('[DEBUG] ArrayBuffer size:', arrayBuffer.byteLength);
+        
         const fileBytes = new Uint8Array(arrayBuffer);
+        console.log('[DEBUG] First 20 bytes:', Array.from(fileBytes.slice(0, 20)));
         
         // Create SplatMesh to parse the file
+        console.log('[DEBUG] Creating SplatMesh...');
         const splatMesh = new SplatMesh({
           fileBytes,
           fileName: file.name
         });
+        console.log('[DEBUG] SplatMesh created, waiting for initialized...');
         
         await splatMesh.initialized;
+        console.log('[DEBUG] SplatMesh initialized!');
         
         // Wait a frame for data to be ready
+        console.log('[DEBUG] Waiting one frame...');
         await new Promise(resolve => requestAnimationFrame(resolve));
+        console.log('[DEBUG] Frame waited');
         
         const packedSplats = splatMesh.packedSplats;
-        const numSplats = packedSplats?.numSplats || 0;
+        console.log('[DEBUG] packedSplats object:', packedSplats);
+        console.log('[DEBUG] packedSplats keys:', packedSplats ? Object.keys(packedSplats) : 'null');
         
-        console.log('Loaded', numSplats, 'splats');
+        const numSplats = packedSplats?.numSplats || 0;
+        console.log('[DEBUG] numSplats:', numSplats);
+        
         document.getElementById('stat-splats').textContent = numSplats.toLocaleString();
         
         if (numSplats === 0) {
+          console.log('[DEBUG] ERROR: No splats found!');
           setStatus('Error: No splats found in file');
           return;
         }
         
         // Extract all splat positions + opacity
+        console.log('[DEBUG] Extracting splat positions...');
         allSplats = [];
+        let invalidCount = 0;
+        let sampleSplat = null;
+        
         for (let i = 0; i < numSplats; i++) {
           const splat = packedSplats.getSplat(i);
+          
+          // Log first splat for debugging
+          if (i === 0) {
+            sampleSplat = splat;
+            console.log('[DEBUG] First splat object:', splat);
+            console.log('[DEBUG] First splat keys:', splat ? Object.keys(splat) : 'null');
+            console.log('[DEBUG] First splat.center:', splat?.center);
+            console.log('[DEBUG] First splat.opacity:', splat?.opacity);
+          }
+          
           const pos = splat.center;
           if (pos && isFinite(pos.x) && isFinite(pos.y) && isFinite(pos.z)) {
             // Spark splats carry opacity; fall back to rgba.a if needed
             const opacity = splat.opacity ?? splat.rgba?.a ?? 1;
             allSplats.push({ pos: new THREE.Vector3(pos.x, pos.y, pos.z), alpha: opacity });
+          } else {
+            invalidCount++;
           }
         }
         
-        console.log('Extracted', allSplats.length, 'valid positions');
+        console.log('[DEBUG] Extracted', allSplats.length, 'valid positions');
+        console.log('[DEBUG] Invalid positions:', invalidCount);
+        
+        if (allSplats.length > 0) {
+          console.log('[DEBUG] First position:', allSplats[0].pos);
+          console.log('[DEBUG] Last position:', allSplats[allSplats.length - 1].pos);
+        }
         
         // Dispose the SplatMesh - we only needed the positions
+        console.log('[DEBUG] Disposing SplatMesh...');
         splatMesh.dispose();
         
         // Update sample and center camera
+        console.log('[DEBUG] Updating sampled positions...');
         updateSampledPositions();
+        console.log('[DEBUG] Centering camera...');
         centerCameraOnPoints();
         
         // Enable generate button
         document.getElementById('generate-btn').disabled = false;
         
+        console.log('[DEBUG] === SPLAT LOAD COMPLETE ===');
         setStatus(`Loaded ${numSplats.toLocaleString()} splats. Adjust sampling and generate mesh.`);
         
       } catch (err) {
-        console.error('Error loading splat:', err);
+        console.error('[DEBUG] === SPLAT LOAD ERROR ===');
+        console.error('[DEBUG] Error:', err);
+        console.error('[DEBUG] Stack:', err.stack);
         setStatus('Error: ' + err.message);
       }
     }
@@ -1329,46 +1384,163 @@
       document.getElementById('fill-radius-value').textContent = val.toFixed(1);
     };
     
-    // ========== Eraser Functions ==========
-    window.toggleEraseMode = function() {
-      eraserMode = document.getElementById('erase-mode').checked;
-      eraserSphere.visible = eraserMode;
+    // ========== Select & Delete Functions ==========
+    window.toggleSelectMode = function() {
+      selectMode = document.getElementById('select-mode').checked;
       
-      // Disable patch mode if erase mode is enabled
-      if (eraserMode && patchMode) {
+      // Disable patch mode if select mode is enabled
+      if (selectMode && patchMode) {
         document.getElementById('patch-mode').checked = false;
         patchMode = false;
         patchPlane.visible = false;
       }
       
-      // Only disable pointer/mouse controls when in erase mode, keep WASD movement
-      if (controls.pointerControls) controls.pointerControls.enable = !eraserMode;
-      // fpsMovement (WASD) stays enabled so you can navigate while erasing
+      // Only disable pointer/mouse controls when in select mode, keep WASD movement
+      if (controls.pointerControls) controls.pointerControls.enable = !selectMode;
       
-      if (eraserMode) {
-        setStatus('Erase mode: Click and drag on mesh to erase (WASD still moves camera)');
+      if (selectMode) {
+        setStatus('Select mode: Click triangles to select (Shift+click to add). Delete key to remove.');
         container.style.cursor = 'crosshair';
       } else {
-        setStatus('Erase mode disabled');
+        setStatus('Select mode disabled');
         container.style.cursor = 'grab';
       }
     };
     
-    window.updateEraserSize = function() {
-      eraserSize = parseFloat(document.getElementById('eraser-size').value);
-      document.getElementById('eraser-size-value').textContent = eraserSize.toFixed(2);
-      eraserSphere.scale.setScalar(eraserSize);
+    window.deleteSelected = function() {
+      if (selectedTriangles.size === 0 || !generatedMesh) return;
+      
+      const geometry = generatedMesh.geometry;
+      const index = geometry.getIndex();
+      if (!index) return;
+      
+      const indices = index.array;
+      const newIndices = [];
+      
+      // Keep only triangles that are NOT selected
+      for (let i = 0; i < indices.length; i += 3) {
+        const triIndex = i / 3;
+        if (!selectedTriangles.has(triIndex)) {
+          newIndices.push(indices[i], indices[i + 1], indices[i + 2]);
+        }
+      }
+      
+      // Update geometry
+      geometry.setIndex(newIndices);
+      geometry.computeBoundingSphere();
+      
+      // Clear selection
+      clearSelection();
+      
+      // Update stats
+      document.getElementById('stat-tris').textContent = (newIndices.length / 3).toLocaleString();
+      
+      // Update helpers
+      updateMeshHelpers();
+      
+      setStatus(`Deleted ${selectedTriangles.size} triangles. ${(newIndices.length / 3).toLocaleString()} remaining.`);
     };
+    
+    window.clearSelection = function() {
+      selectedTriangles.clear();
+      updateSelectionHighlight();
+      document.getElementById('stat-selected').textContent = '0';
+      document.getElementById('delete-btn').disabled = true;
+    };
+    
+    function selectTriangleAtMouse(event, addToSelection = false) {
+      if (!selectMode || !generatedMesh) return;
+      
+      const rect = container.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      const intersects = raycaster.intersectObject(generatedMesh);
+      if (intersects.length > 0) {
+        const faceIndex = intersects[0].faceIndex;
+        
+        if (!addToSelection) {
+          // Clear previous selection unless Shift is held
+          selectedTriangles.clear();
+        }
+        
+        // Toggle selection
+        if (selectedTriangles.has(faceIndex)) {
+          selectedTriangles.delete(faceIndex);
+        } else {
+          selectedTriangles.add(faceIndex);
+        }
+        
+        updateSelectionHighlight();
+        document.getElementById('stat-selected').textContent = selectedTriangles.size.toString();
+        document.getElementById('delete-btn').disabled = selectedTriangles.size === 0;
+      }
+    }
+    
+    function updateSelectionHighlight() {
+      // Remove old highlight mesh
+      if (highlightMesh) {
+        scene.remove(highlightMesh);
+        highlightMesh.geometry.dispose();
+        highlightMesh.material.dispose();
+        highlightMesh = null;
+      }
+      
+      if (selectedTriangles.size === 0 || !generatedMesh) return;
+      
+      // Create geometry for selected triangles
+      const srcGeometry = generatedMesh.geometry;
+      const srcPositions = srcGeometry.getAttribute('position');
+      const srcIndex = srcGeometry.getIndex();
+      
+      if (!srcIndex) return;
+      
+      const positions = [];
+      
+      for (const triIndex of selectedTriangles) {
+        const i = triIndex * 3;
+        if (i + 2 < srcIndex.count) {
+          const i0 = srcIndex.getX(i);
+          const i1 = srcIndex.getX(i + 1);
+          const i2 = srcIndex.getX(i + 2);
+          
+          positions.push(
+            srcPositions.getX(i0), srcPositions.getY(i0), srcPositions.getZ(i0),
+            srcPositions.getX(i1), srcPositions.getY(i1), srcPositions.getZ(i1),
+            srcPositions.getX(i2), srcPositions.getY(i2), srcPositions.getZ(i2)
+          );
+        }
+      }
+      
+      const highlightGeometry = new THREE.BufferGeometry();
+      highlightGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      
+      const highlightMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff4444,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.6,
+        depthTest: true,
+        depthWrite: false
+      });
+      
+      highlightMesh = new THREE.Mesh(highlightGeometry, highlightMaterial);
+      highlightMesh.renderOrder = 1; // Render on top
+      scene.add(highlightMesh);
+    }
     
     // ========== Patch Tool Functions ==========
     window.togglePatchMode = function() {
       patchMode = document.getElementById('patch-mode').checked;
       patchPlane.visible = patchMode;
       
-      // Disable erase mode if patch mode is enabled
-      if (patchMode && eraserMode) {
-        document.getElementById('erase-mode').checked = false;
-        toggleEraseMode();
+      // Disable select mode if patch mode is enabled
+      if (patchMode && selectMode) {
+        document.getElementById('select-mode').checked = false;
+        selectMode = false;
+        clearSelection();
       }
       
       // Disable pointer controls when in patch mode
@@ -1519,109 +1691,26 @@
       setStatus(`Patch placed. Total: ${(existingPosArray.length / 3).toLocaleString()} vertices, ${(existingIndexArray.length / 3).toLocaleString()} triangles`);
     }
     
-    // Update eraser sphere position based on mouse/raycast
-    function updateEraserPosition(event) {
-      if (!eraserMode) return;
-      
-      const rect = container.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      
-      raycaster.setFromCamera(mouse, camera);
-      
-      // First try to intersect with the generated mesh
-      if (generatedMesh && generatedMesh.visible) {
-        const intersects = raycaster.intersectObject(generatedMesh);
-        if (intersects.length > 0) {
-          eraserSphere.position.copy(intersects[0].point);
-          return;
-        }
-      }
-      
-      // If no mesh hit, place sphere at a fixed distance along ray
-      const point = raycaster.ray.at(10, new THREE.Vector3());
-      eraserSphere.position.copy(point);
-    }
-    
-    // Erase triangles within the eraser sphere
-    function eraseAtPosition() {
-      if (!eraserMode || !generatedMesh) return;
-      
-      const geometry = generatedMesh.geometry;
-      const position = geometry.getAttribute('position');
-      const index = geometry.getIndex();
-      
-      if (!index) return; // Non-indexed geometry not supported
-      
-      const eraserPos = eraserSphere.position;
-      const eraserRadiusSq = eraserSize * eraserSize;
-      
-      const indices = index.array;
-      const positions = position.array;
-      const newIndices = [];
-      
-      // Check each triangle
-      for (let i = 0; i < indices.length; i += 3) {
-        const i0 = indices[i];
-        const i1 = indices[i + 1];
-        const i2 = indices[i + 2];
-        
-        // Get triangle vertices
-        const v0 = new THREE.Vector3(positions[i0 * 3], positions[i0 * 3 + 1], positions[i0 * 3 + 2]);
-        const v1 = new THREE.Vector3(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
-        const v2 = new THREE.Vector3(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
-        
-        // Check if any vertex is within eraser sphere
-        const inSphere = 
-          v0.distanceToSquared(eraserPos) < eraserRadiusSq ||
-          v1.distanceToSquared(eraserPos) < eraserRadiusSq ||
-          v2.distanceToSquared(eraserPos) < eraserRadiusSq;
-        
-        // Keep triangle if NOT in sphere
-        if (!inSphere) {
-          newIndices.push(i0, i1, i2);
-        }
-      }
-      
-      // Update geometry with new indices
-      geometry.setIndex(newIndices);
-      geometry.computeBoundingSphere();
-      
-      // Update stats
-      document.getElementById('stat-tris').textContent = (newIndices.length / 3).toLocaleString();
-    }
-    
-    // Mouse event handlers for eraser and patch
+    // Mouse event handlers for select and patch
     container.addEventListener('mousemove', (e) => {
-      updateEraserPosition(e);
       updatePatchPosition(e);
-      if (isErasing) {
-        eraseAtPosition();
-      }
     });
     
     container.addEventListener('mousedown', (e) => {
-      if (eraserMode && e.button === 0) {
-        isErasing = true;
-        eraseAtPosition();
+      if (selectMode && e.button === 0) {
+        selectTriangleAtMouse(e, e.shiftKey);
       }
       if (patchMode && e.button === 0) {
         placePatch();
       }
     });
     
-    container.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        if (isErasing) {
-          isErasing = false;
-          // Update helpers after erasing is done
-          updateMeshHelpers();
-        }
+    // Keyboard handler for Delete key
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTriangles.size > 0) {
+        e.preventDefault();
+        deleteSelected();
       }
-    });
-    
-    container.addEventListener('mouseleave', () => {
-      isErasing = false;
     });
     
     window.togglePoints = function() {

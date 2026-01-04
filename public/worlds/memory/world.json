@@ -1,6 +1,9 @@
 {
   "name": "Memory house",
-  "splatUrl": "/memory/splats/aj_full_downresed-lod-0.spz",
+  "splatUrl": "/memory/splats/memory-lod-0.spz",
+  "collisionUrl": "/memory/memory.glb",
+  "position": [81.52, 0.7, 22.56],
+  "rotation": [0, 0, 0, 1],
   "portals": [
   ]
 }

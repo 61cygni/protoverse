@@ -8,6 +8,7 @@ import { loadWorldJSON } from "./scene.js";
 import { updateDiskAnimation } from "./sparkdisk.js";
 import { onCollisionMeshToggle, getCollisionMeshVisible } from "./hud.js";
 import { addCollisionMesh, removeCollisionMesh, isPhysicsInitialized, syncPlayerToLocalFrame } from "./physics.js";
+import { showLoading, updateLoading, hideLoading, isLoadingVisible } from "./loading.js";
 
 /**
  * Configuration options for ProtoVerse
@@ -21,6 +22,7 @@ export class ProtoVerseConfig {
         this.useCdn = options.useCdn ?? false;
         this.resolveUrl = options.resolveUrl ?? null; // Function to resolve URLs
         this.onWorldChange = options.onWorldChange ?? null; // Callback when world changes (worldUrl, worldData)
+        this.backgroundPreloadCollision = options.backgroundPreloadCollision ?? true; // Preload collision meshes in background
     }
 }
 
@@ -223,9 +225,19 @@ export class ProtoVerse {
         }
 
         // 2. Load world meshes for worlds in the plan
+        const totalWorlds = plan.worldsToLoad.length;
+        let loadedWorlds = 0;
+        
         for (const node of plan.worldsToLoad) {
             const worldUrl = node.url;
             const worldData = node.worldData; // Already loaded in Phase 1
+            
+            // Update loading progress if visible
+            if (isLoadingVisible()) {
+                const progress = 40 + (loadedWorlds / totalWorlds) * 50;
+                const worldName = worldData?.name || worldUrl.split('/').slice(-2, -1)[0] || 'world';
+                updateLoading(progress, `Loading ${worldName}...`);
+            }
             
             // Debug: log worldData to verify it has all fields
             console.log("Processing world:", worldUrl);
@@ -235,6 +247,7 @@ export class ProtoVerse {
             // Skip mesh loading if already loaded
             if (this.worldState.has(worldUrl) && this.worldState.get(worldUrl).mesh) {
                 console.log("World mesh already loaded:", worldUrl);
+                loadedWorlds++;
                 continue;
             }
 
@@ -262,10 +275,23 @@ export class ProtoVerse {
                 console.log("  Mesh position:", mesh.position.toArray());
             }
             
-            // Load collision mesh if not already loaded and collisionUrl is present
-            if (!state.collisionMesh && worldData.collisionUrl) {
-                console.log("Loading collision mesh for:", worldUrl);
+            // Load collision mesh ONLY for the current root world (lazy load others on portal crossing)
+            // This dramatically speeds up initial load by deferring non-essential collision meshes
+            const isCurrentRoot = (worldUrl === newRootUrl);
+            
+            if (!state.collisionMesh && worldData.collisionUrl && isCurrentRoot) {
+                console.log("Loading collision mesh for root world:", worldUrl);
                 console.log("  collisionUrl from JSON:", worldData.collisionUrl);
+                
+                // Show loading bar for collision mesh (even if not initial load)
+                const worldName = worldData?.name || 'world';
+                const wasLoadingVisible = isLoadingVisible();
+                if (!wasLoadingVisible) {
+                    showLoading(`Loading collision mesh for ${worldName}...`);
+                } else {
+                    updateLoading(null, `Loading collision mesh for ${worldName}...`);
+                }
+                
                 try {
                     const collisionUrl = worldData.collisionUrl.startsWith('http')
                         ? worldData.collisionUrl
@@ -284,12 +310,25 @@ export class ProtoVerse {
                         console.log("  Registering collision mesh with physics...");
                         addCollisionMesh(collisionMesh, worldno);
                     }
+                    
+                    // Hide loading bar if we showed it
+                    if (!wasLoadingVisible) {
+                        hideLoading();
+                    }
                 } catch (error) {
                     console.error("Failed to load collision mesh for:", worldUrl, error);
+                    // Hide loading bar on error too
+                    if (!wasLoadingVisible) {
+                        hideLoading();
+                    }
                 }
             } else if (!worldData.collisionUrl) {
                 console.log("No collisionUrl specified for:", worldUrl);
+            } else if (!isCurrentRoot && worldData.collisionUrl) {
+                console.log("Deferring collision mesh load for non-root world:", worldUrl);
             }
+            
+            loadedWorlds++;
         }
 
         // 3. Set up portals based on plan
@@ -442,6 +481,84 @@ export class ProtoVerse {
         if (this.config.onWorldChange) {
             this.config.onWorldChange(rootUrl, worldData);
         }
+        
+        // Start background preloading of collision meshes for nearby worlds
+        if (this.config.backgroundPreloadCollision) {
+            this._preloadCollisionMeshesInBackground(rootUrl);
+        }
+    }
+    
+    /**
+     * Preload collision meshes for non-root worlds in the background
+     * This runs after the initial load completes, so it doesn't block the user
+     * @param {string} excludeUrl - URL to exclude (already loaded as root)
+     */
+    async _preloadCollisionMeshesInBackground(excludeUrl) {
+        console.log("Starting background preload of collision meshes...");
+        console.log("  Worlds in state:", [...this.worldState.keys()]);
+        console.log("  Excluding:", excludeUrl);
+        
+        // Small delay to let the main thread settle after initial load
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // First pass: count how many we need to load
+        const worldsToLoad = [];
+        for (const [worldUrl, state] of this.worldState.entries()) {
+            if (worldUrl === excludeUrl) continue;
+            if (state.collisionMesh) continue;
+            const worldData = state.data;
+            if (!worldData?.collisionUrl) continue;
+            worldsToLoad.push({ worldUrl, state, worldData });
+        }
+        
+        if (worldsToLoad.length === 0) {
+            console.log("  No collision meshes to preload");
+            return;
+        }
+        
+        console.log(`  ${worldsToLoad.length} collision meshes to preload`);
+        
+        // Show loading bar for background preload
+        showLoading(`Loading collision meshes (0/${worldsToLoad.length})...`);
+        
+        let loaded = 0;
+        for (const { worldUrl, state, worldData } of worldsToLoad) {
+            const worldName = worldData?.name || worldUrl.split('/').slice(-2, -1)[0] || 'world';
+            updateLoading((loaded / worldsToLoad.length) * 100, `Loading collision mesh: ${worldName}...`);
+            
+            console.log("Background loading collision mesh for:", worldUrl, "collisionUrl:", worldData.collisionUrl);
+            try {
+                const collisionUrl = worldData.collisionUrl.startsWith('http')
+                    ? worldData.collisionUrl
+                    : this._resolveUrl(worldData.collisionUrl);
+                    
+                const collisionMesh = await this.protoScene.loadCollisionMesh(
+                    collisionUrl,
+                    state.worldno,
+                    getCollisionMeshVisible()
+                );
+                state.collisionMesh = collisionMesh;
+                
+                // Register with physics if initialized
+                if (isPhysicsInitialized()) {
+                    addCollisionMesh(collisionMesh, state.worldno);
+                }
+                
+                console.log("  Background loaded collision mesh for:", worldUrl);
+                loaded++;
+                
+                // Small delay between loads to avoid blocking the main thread
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+            } catch (error) {
+                console.error("Background collision mesh load failed for:", worldUrl, error);
+                loaded++;
+            }
+        }
+        
+        // Hide loading bar when done
+        hideLoading();
+        console.log("Background collision mesh preloading complete");
     }
 
     /**

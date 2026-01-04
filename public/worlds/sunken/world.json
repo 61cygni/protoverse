@@ -1,6 +1,7 @@
 {
   "name": "Sunken Ship",
   "splatUrl": "/sunken/splats/sunken-lod-0.spz",
+  "collisionUrl": "/sunken/sunken.glb",
   "portals": [
   ]
 }

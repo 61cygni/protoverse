@@ -12,10 +12,66 @@
     canvas {
       touch-action: none;
     }
+    
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 20px;
+    }
+    #loading-overlay.hidden {
+      display: none;
+    }
+    #loading-container {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      border-radius: 8px;
+      padding: 12px 24px;
+      min-width: 280px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    #loading-text {
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    #loading-bar-bg {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #loading-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4a9aff, #7b5cff);
+      border-radius: 3px;
+      transition: width 0.3s ease-out;
+    }
   </style>
 </head>
 
 <body>
+  <!-- Loading overlay -->
+  <div id="loading-overlay">
+    <div id="loading-container">
+      <div id="loading-text">Loading...</div>
+      <div id="loading-bar-bg">
+        <div id="loading-bar"></div>
+      </div>
+    </div>
+  </div>
+  
   <script type="module" src="/main.js"></script>
 </body>
 

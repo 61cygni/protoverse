@@ -9,13 +9,25 @@
     {
       "name": "Sunken Ship",
       "start": {
-        "position": [2.60, -1.23, 13.72],
-        "rotation": [0, 0.78, 0, -0.63]
+        "position": [0.99, -1.13, 16.22],
+        "rotation": [0, 0.5071067811865476, 0, 0.9071067811865476]
+      },
+      "destination": {
+        "url": "/sunken/world.json",
+        "position": [15.63, 16.19, 8.11],
+        "rotation": [0, 0.7, 0, -0.7]
+      }
+    },
+    {
+      "name": "Sunken Ship Exit",
+      "start": {
+        "position": [11.85, -0.52, 10.62],
+        "rotation": [0, 0.7071067811865476, 0, 0.7071067811865476]
       },
       "destination": {
         "url": "/sunken/world.json",
         "position": [-9.17, -2.46, -42.75],
-        "rotation": [0, 0.7, 0, -0.7]
+        "rotation": [0, 0.7, 0, 0.7]
       }
     },
     {
@@ -26,20 +38,44 @@
       },
       "destination": {
         "url": "/worldship/world.json",
-        "position": [1.21, 3.18, -5.88],
+        "position": [-1.33, 3.40, 3.50],
         "rotation": [0, 0, 0, 1]
       }
     },
     {
+      "name": "World Ship Exit",
+      "start": {
+        "position": [-12.27, -1.27, 10.75],
+        "rotation": [0, 0.7, 0, -0.7]
+      },
+      "destination": {
+        "url": "/worldship/world.json",
+        "position": [203.72, -28.53, 145.81],
+        "rotation": [0, 1, 0, 0]
+      }
+    },
+    {
       "name": "Memory house",
+      "start": {
+        "position": [-3.33, -1.2, 16.17],
+        "rotation": [0, -0.383, 0, 0.924]
+      },
+      "destination": {
+        "url": "/memory/world.json",
+        "position": [0.54, -0.63, 6.19],
+        "rotation": [0, 1, 0, 0]
+      }
+    },
+    {
+      "name": "Memory house exit",
       "start": {
         "position": [-7.27, -1.52, 8.10],
         "rotation": [0, 1, 0, 0]
       },
       "destination": {
         "url": "/memory/world.json",
-        "position": [81.52, 0.7, 22.56],
-        "rotation": [0, 0, 0, 1]
+        "position": [151.42, -5.71, 69.95],
+        "rotation": [0, 0.707, 0, 0.707]
       }
     },
     {
@@ -57,13 +93,13 @@
     {
       "name": "Cozy Ship",
       "start": {
-        "position": [-12.27, -1.27, 10.75],
-        "rotation": [0, 0.7, 0, -0.7]
+        "position": [2.60, -1.23, 13.72],
+        "rotation": [0, 0.78, 0, -0.63]
       },
       "destination": {
         "url": "/cozyship/world.json",
         "position": [-7.25, 6.78, 8.18],
-        "rotation": [0, 1, 0, 0]
+        "rotation": [0, 0, 0, 1]
       }
     }
   ]

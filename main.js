@@ -5,28 +5,23 @@ import { ProtoVerse } from "./proto.js";
 import { ProtoScene, loadWorldJSON } from "./scene.js";
 import { createUrlResolver } from "./paths.js";
 import { ProtoverseMultiplayer } from "./multiplayer.js";
-import { 
+import {
     initPhysics, 
     createPlayerBody, 
     setupThrusterInput, 
     updatePhysics, 
     setPhysicsEnabled,
-    isPhysicsEnabled,
-    addCollisionMesh,
     setDebugSphereVisible,
     createOrientationGizmo
 } from "./physics.js";
+import { showLoading, updateLoading, hideLoading } from "./loading.js";
+import { config } from "./config.js";
 
+// URL resolution
+const resolveUrl = createUrlResolver({ urlBase: config.urls.urlBase });
 
-const USE_CDN = false;
-
-let urlBase = USE_CDN ? "https://public-spz.t3.storage.dev" : "/worlds"
-let urlConfig = { urlBase, useCdn: USE_CDN };
-const resolveUrl = createUrlResolver({ urlBase });
-
-
-// Starting point (relative path - resolved when fetching)
-const rootworld = "/root/world.json";
+// Root world from config
+const rootworld = config.world.rootWorld;
 
 const stats = initHud();
 initAudio(resolveUrl);
@@ -39,30 +34,42 @@ const localFrame = protoScene.getLocalFrame();
 
 // ========== ProtoVerse Setup ==========
 const protoVerse = new ProtoVerse(protoScene, {
-    preloadHops: 2,
-    showPortalLabels: false,
-    useUrlsForLabels: true,
-    urlBase: urlConfig.urlBase,
-    useCdn: urlConfig.useCdn,
+    preloadHops: config.world.preloadHops,
+    showPortalLabels: config.portals.showLabels,
+    useUrlsForLabels: config.portals.useUrlsForLabels,
+    urlBase: config.urls.urlBase,
+    useCdn: config.urls.useCdn,
+    backgroundPreloadCollision: config.world.backgroundPreloadCollision,
     resolveUrl: resolveUrl,
     onWorldChange: (worldUrl, worldData) => {
         // Handle world change (e.g., play audio)
         setCurrentWorldData(worldData);
         playWorldAudio(worldData);
         // Join the matching multiplayer room when world changes
-        multiplayer.joinWorld(worldUrl, playerName);
+        if (config.multiplayer.enabled && multiplayer) {
+            multiplayer.joinWorld(worldUrl, playerName);
+        }
+        if (config.debug.logWorldChanges) {
+            console.log("World changed:", worldUrl, worldData?.name);
+        }
     }
 });
 
 // ========== Multiplayer Setup ==========
-const playerName = `player-${Math.floor(Math.random() * 10000)}`;
-const multiplayer = new ProtoverseMultiplayer(protoScene.getScene(), {
-    wsUrl: import.meta.env?.VITE_WS_URL,
-});
+const playerName = `${config.multiplayer.playerNamePrefix}-${Math.floor(Math.random() * 10000)}`;
+const multiplayer = config.multiplayer.enabled 
+    ? new ProtoverseMultiplayer(protoScene.getScene(), {
+        wsUrl: config.multiplayer.wsUrl || import.meta.env?.VITE_WS_URL,
+    })
+    : null;
 
 // Start of Execution Here 
 
+// Show loading overlay
+showLoading('Loading world data...');
+
 // Load initial world data for camera position, then use DAG to load everything
+updateLoading(10, 'Loading world configuration...');
 const initialWorldData = await loadWorldJSON(resolveUrl(rootworld));
 console.log("main.js: initialWorldData loaded:");
 console.log("  keys:", Object.keys(initialWorldData));
@@ -74,13 +81,22 @@ setCurrentWorldData(initialWorldData);
 
 // Set initial camera position from world data
 localFrame.position.fromArray(initialWorldData.position);
-localFrame.quaternion.fromArray(initialWorldData.rotation);
+
+// Apply starting rotation from config (if specified), otherwise use world.json rotation
+if (config.world.startingCameraRotation) {
+    const [x, y, z] = config.world.startingCameraRotation;
+    // Set localFrame rotation (camera's world rotation = localFrame rotation since camera is a child)
+    localFrame.rotation.set(x, y, z);
+} else {
+    localFrame.quaternion.fromArray(initialWorldData.rotation);
+}
 
 // ========== Controls & VR Setup ==========
+updateLoading(20, 'Initializing controls...');
 const { controls, sparkXr } = initControls(renderer, camera, localFrame, {
-    enableVr: true,
-    animatePortal: true,
-    xrFramebufferScale: 0.5,
+    enableVr: config.vr.enabled,
+    animatePortal: config.portals.animatePortal,
+    xrFramebufferScale: config.vr.framebufferScale,
     onEnterXr: async () => {
         // Resume AudioContext when entering VR (this is a valid user gesture)
         await ensureAudioContext();
@@ -96,6 +112,7 @@ const { controls, sparkXr } = initControls(renderer, camera, localFrame, {
 });
 
 // ========== Physics Setup (before loading worlds so collision meshes get registered) ==========
+updateLoading(30, 'Initializing physics...');
 await initPhysics();
 createPlayerBody(localFrame, camera, protoScene.getScene(), renderer);
 setupThrusterInput();
@@ -103,7 +120,11 @@ createOrientationGizmo();  // Create orientation indicator for physics mode
 
 // Initialize ProtoVerse with root world (this will trigger onWorldChange callback)
 // NOTE: This must happen AFTER physics is initialized so collision meshes get registered
+updateLoading(40, 'Loading world and collision meshes...');
 await protoVerse.initialize(rootworld, initialWorldData);
+
+// Hide loading overlay after everything is loaded
+hideLoading();
 
 // Create audio toggle button (in HUD)
 createAudioToggleButton(handleAudioToggle);
@@ -137,7 +158,7 @@ window.addEventListener("resize", () => {
 
 // ========== Animation Loop ==========
 const animationLoop = createAnimationLoop({
-    stats,
+    stats: config.debug.showFps ? stats : null,
     controls,
     sparkXr,
     renderer,
@@ -146,16 +167,16 @@ const animationLoop = createAnimationLoop({
     updateHUD: () => updateHUD(camera, protoVerse, rootworld),
     updatePortals: () => protoVerse.updatePortals(),
     updatePortalDisks: (time, isInVR, animatePortal) => protoVerse.updatePortalDisks(time, isInVR, animatePortal),
-    updateMultiplayer: (time) => {
+    updateMultiplayer: config.multiplayer.enabled && multiplayer ? (time) => {
         multiplayer.update(
             time,
             localFrame.position.toArray(),
             localFrame.quaternion.toArray(),
             { playerName }
         );
-    },
+    } : null,
     updatePhysics: (deltaTime) => updatePhysics(deltaTime),
-    animatePortal: true,
+    animatePortal: config.portals.animatePortal,
 });
 
 renderer.setAnimationLoop(animationLoop);

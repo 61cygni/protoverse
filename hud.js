@@ -230,9 +230,11 @@ const physicsListeners = new Set();
 /**
  * Create physics toggle button (below collision mesh toggle)
  * @param {Function} onToggle - Callback function called when physics is toggled
+ * @param {boolean} initialState - Initial physics enabled state (default: false)
  */
-export function createPhysicsToggleButton(onToggle) {
+export function createPhysicsToggleButton(onToggle, initialState = false) {
     physicsToggleCallback = onToggle;
+    physicsEnabled = initialState;
     
     const button = document.createElement("button");
     button.id = "physics-toggle";

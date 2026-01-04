@@ -148,7 +148,15 @@ createPhysicsToggleButton((enabled) => {
         if (controls.fpsMovement) controls.fpsMovement.enable = !enabled;
         // pointerControls stays enabled for mouse look
     }
-});
+}, config.debug.physicsEnabled);
+
+// Enable physics by default if configured (must be after controls are set up)
+if (config.debug.physicsEnabled) {
+    setPhysicsEnabled(true);
+    if (controls && controls.fpsMovement) {
+        controls.fpsMovement.enable = false;
+    }
+}
 
 // ========== Resize Handler ==========
 window.addEventListener("resize", () => {

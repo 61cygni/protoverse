@@ -16,6 +16,44 @@ function getSparkBuildTime() {
   return 'unknown';
 }
 
+// Plugin to copy public/ files excluding worlds/ directory (those are on CDN)
+function copyPublicExcludingWorlds() {
+  return {
+    name: 'copy-public-excluding-worlds',
+    writeBundle() {
+      const publicDir = path.resolve(__dirname, 'public');
+      const distDir = path.resolve(__dirname, 'dist');
+      
+      // Copy files from public/ to dist/, excluding worlds/
+      function copyRecursive(src, dest, relativePath = '') {
+        if (!fs.existsSync(src)) return;
+        
+        const entries = fs.readdirSync(src, { withFileTypes: true });
+        for (const entry of entries) {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          const relPath = path.join(relativePath, entry.name);
+          
+          // Skip worlds directory
+          if (relPath === 'worlds' || relPath.startsWith('worlds/') || relPath.startsWith('worlds\\')) {
+            continue;
+          }
+          
+          if (entry.isDirectory()) {
+            fs.mkdirSync(destPath, { recursive: true });
+            copyRecursive(srcPath, destPath, relPath);
+          } else {
+            fs.copyFileSync(srcPath, destPath);
+          }
+        }
+      }
+      
+      copyRecursive(publicDir, distDir);
+      console.log('✓ Copied public/ to dist/ (excluding worlds/)');
+    }
+  };
+}
+
 export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
@@ -27,9 +65,10 @@ export default defineConfig(({ command }) => ({
     port: 3000,
     open: true
   },
-  // In dev mode: serve from public/ directory for local testing
-  // In build mode: don't copy public/ to dist/ (assets are on CDN)
+  // Dev: serve public/ for local testing (includes worlds/)
+  // Build: disable default publicDir, use plugin to copy excluding worlds/
   publicDir: command === 'serve' ? 'public' : false,
+  plugins: command === 'build' ? [copyPublicExcludingWorlds()] : [],
   build: {
     // Target ES2022 to support top-level await
     target: 'es2022',

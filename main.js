@@ -11,8 +11,7 @@ import {
     setupThrusterInput, 
     updatePhysics, 
     setPhysicsEnabled,
-    setDebugSphereVisible,
-    createOrientationGizmo
+    setDebugSphereVisible
 } from "./physics.js";
 import { showLoading, updateLoading, hideLoading } from "./loading.js";
 import { config } from "./config.js";
@@ -116,7 +115,6 @@ updateLoading(30, 'Initializing physics...');
 await initPhysics();
 createPlayerBody(localFrame, camera, protoScene.getScene(), renderer);
 setupThrusterInput();
-createOrientationGizmo();  // Create orientation indicator for physics mode
 
 // Initialize ProtoVerse with root world (this will trigger onWorldChange callback)
 // NOTE: This must happen AFTER physics is initialized so collision meshes get registered

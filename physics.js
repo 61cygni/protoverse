@@ -25,12 +25,6 @@ let sceneRef = null;
 let debugSphere = null;
 let debugSphereVisible = false;
 
-// Orientation gizmo (shows player orientation when physics is enabled - desktop only)
-let orientationScene = null;
-let orientationCamera = null;
-let orientationGizmo = null;
-let orientationRenderer = null;
-
 // Collision bodies for world geometry
 const collisionBodies = [];
 
@@ -285,136 +279,6 @@ export function setDebugSphereVisible(visible) {
     debugSphereVisible = visible;
     if (debugSphere) {
         debugSphere.visible = visible;
-    }
-}
-
-/**
- * Create the orientation gizmo overlay
- * Shows player orientation in the bottom-left corner when physics is enabled
- */
-export function createOrientationGizmo() {
-    // Create a small renderer for the gizmo overlay
-    orientationRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    orientationRenderer.setSize(150, 150);
-    orientationRenderer.setClearColor(0x000000, 0);
-    
-    // Style and position the canvas
-    const canvas = orientationRenderer.domElement;
-    canvas.id = 'orientation-gizmo';
-    canvas.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 150px;
-        height: 150px;
-        pointer-events: none;
-        z-index: 1000;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
-        background: rgba(0, 0, 0, 0.3);
-        display: none;
-    `;
-    document.body.appendChild(canvas);
-    
-    // Create scene and camera for gizmo
-    orientationScene = new THREE.Scene();
-    orientationCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
-    orientationCamera.position.set(0, 0, 3);
-    orientationCamera.lookAt(0, 0, 0);
-    
-    // Create the gizmo group
-    orientationGizmo = new THREE.Group();
-    
-    // Create arrow helpers for each axis
-    const arrowLength = 0.8;
-    const arrowHeadLength = 0.2;
-    const arrowHeadWidth = 0.1;
-    
-    // Forward (Z-) = Blue arrow pointing "forward"
-    const forwardArrow = new THREE.ArrowHelper(
-        new THREE.Vector3(0, 0, -1),
-        new THREE.Vector3(0, 0, 0),
-        arrowLength, 0x0088ff, arrowHeadLength, arrowHeadWidth
-    );
-    orientationGizmo.add(forwardArrow);
-    
-    // Right (X+) = Red arrow
-    const rightArrow = new THREE.ArrowHelper(
-        new THREE.Vector3(1, 0, 0),
-        new THREE.Vector3(0, 0, 0),
-        arrowLength * 0.7, 0xff4444, arrowHeadLength * 0.8, arrowHeadWidth * 0.8
-    );
-    orientationGizmo.add(rightArrow);
-    
-    // Up (Y+) = Green arrow
-    const upArrow = new THREE.ArrowHelper(
-        new THREE.Vector3(0, 1, 0),
-        new THREE.Vector3(0, 0, 0),
-        arrowLength * 0.7, 0x44ff44, arrowHeadLength * 0.8, arrowHeadWidth * 0.8
-    );
-    orientationGizmo.add(upArrow);
-    
-    // Add a small sphere at origin for reference
-    const originSphere = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1, 16, 16),
-        new THREE.MeshBasicMaterial({ color: 0xffffff })
-    );
-    orientationGizmo.add(originSphere);
-    
-    // Add label texts (using sprites)
-    const labels = [
-        { text: 'F', pos: [0, 0, -1.1], color: '#0088ff' },  // Forward
-        { text: 'R', pos: [1.0, 0, 0], color: '#ff4444' },   // Right
-        { text: 'U', pos: [0, 1.0, 0], color: '#44ff44' },   // Up
-    ];
-    
-    labels.forEach(({ text, pos, color }) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = color;
-        ctx.font = 'bold 48px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, 32, 32);
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-        const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.set(...pos);
-        sprite.scale.set(0.3, 0.3, 0.3);
-        orientationGizmo.add(sprite);
-    });
-    
-    orientationScene.add(orientationGizmo);
-    
-    // Add ambient light
-    orientationScene.add(new THREE.AmbientLight(0xffffff, 1));
-    
-    console.log("✓ Orientation gizmo created");
-}
-
-/**
- * Update the orientation gizmo to match player orientation (desktop only)
- */
-function updateOrientationGizmo() {
-    if (!localFrameRef) return;
-    
-    // Update 2D overlay gizmo (for desktop)
-    if (orientationGizmo && orientationRenderer) {
-        const canvas = orientationRenderer.domElement;
-        
-        if (isEnabled) {
-            canvas.style.display = 'block';
-            
-            // Show localFrame orientation (where thrust goes), not camera orientation
-            orientationGizmo.quaternion.copy(localFrameRef.quaternion).invert();
-            
-            orientationRenderer.render(orientationScene, orientationCamera);
-        } else {
-            canvas.style.display = 'none';
-        }
     }
 }
 
@@ -794,9 +658,6 @@ function clampVelocity() {
  * @param {number} deltaTime - Time since last frame in seconds
  */
 export function updatePhysics(deltaTime) {
-    // Always update orientation gizmo (it handles its own visibility)
-    updateOrientationGizmo();
-    
     if (!isInitialized || !world || !isEnabled) return;
     
     // Apply thruster forces

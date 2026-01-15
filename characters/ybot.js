@@ -31,7 +31,6 @@ import {
 } from "../vr-chat.js";
 import { onCinemaModeChange, offCinemaModeChange, captureFoundryFrame, isCinemaModeActive, getFoundryScreenPosition, getFoundryScreenRotation, getFoundryMovieConfig, getFoundryDisplayConfig, isFoundryDisplayPaused } from "../foundry-share.js";
 import { initVRCommentary, showVRCommentary, hideVRCommentary } from "../vr-commentary-panel.js";
-import { initVRPlaybackControls, showVRPlaybackButton, hideVRPlaybackButton, showDesktopPlaybackButton, hideDesktopPlaybackButton } from "../vr-playback-controls.js";
 
 const forwardDir = new THREE.Vector3();
 const targetDir = new THREE.Vector3();
@@ -246,23 +245,6 @@ function handleCinemaModeChange(instance, manager, isActive, worldUrl) {
         // Create commentary display element
         createCommentaryDisplay();
         
-        // Show playback buttons (both VR and desktop - they only work in their respective modes)
-        if (state.screenPosition) {
-            const displayConfig = state.displayConfig || {};
-            
-            // Always show VR button (3D in scene - only interactable in VR)
-            showVRPlaybackButton(
-                worldUrl, 
-                state.screenPosition, 
-                state.screenRotation,
-                0,  // display identifier
-                displayConfig.vrPlaybackButton  // Button position config from world.json
-            );
-            
-            // Always show desktop button (2D overlay - only visible/useful outside VR)
-            showDesktopPlaybackButton(worldUrl, 0);
-        }
-        
     } else {
         // Cinema mode ended - resume wandering
         state.inCinemaMode = false;
@@ -271,10 +253,6 @@ function handleCinemaModeChange(instance, manager, isActive, worldUrl) {
         // Stop commentary
         stopCommentaryTimer();
         removeCommentaryDisplay();
-        
-        // Hide playback buttons (both VR and desktop)
-        hideVRPlaybackButton();
-        hideDesktopPlaybackButton();
         
         // Resume from where we were or go back to last position
         if (state.lastNodeBeforeCinema && state.graph.has(state.lastNodeBeforeCinema)) {

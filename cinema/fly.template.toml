@@ -1,0 +1,43 @@
+# Fly.io config template for cinema deployments
+# This file is used as a template by deploy.sh
+# Do not edit directly - values are substituted at deploy time
+
+app = '{{APP_NAME}}'
+primary_region = '{{REGION}}'
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MOVIE_NAME = "{{MOVIE_NAME}}"
+  LOOP = "true"
+  WS_PORT = "8765"
+
+# Foundry HTTP service
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+  [[http_service.checks]]
+    grace_period = "120s"
+    interval = "30s"
+    timeout = "10s"
+    method = "GET"
+    path = "/"
+
+# WS server for multiplayer
+[[services]]
+  internal_port = 8765
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8765
+    handlers = ["tls", "http"]
+
+[[vm]]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 1

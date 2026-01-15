@@ -34,7 +34,7 @@ export const config = {
     // ========== URL / CDN Settings ==========
     urls: {
         // Use CDN for assets (splats, collision meshes, etc.)
-        useCdn: false,
+        useCdn: true,
         
         // CDN base URL (used when useCdn is true)
         cdnBase: "https://public-spz.t3.storage.dev",

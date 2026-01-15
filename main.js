@@ -25,7 +25,6 @@ import { initChatProvider } from "./ai/chat-provider.js";
 import { initChatUI } from "./chat-ui.js";
 import { initVRChat, updateVRChat } from "./vr-chat.js";
 import { initVRCommentary } from "./vr-commentary-panel.js";
-import { initVRPlaybackControls, updateVRPlaybackControls, showVRPlaybackButton, hideVRPlaybackButton, showDesktopPlaybackButton, hideDesktopPlaybackButton } from "./vr-playback-controls.js";
 import { initSpatialAudio, loadWorldAudioSources, unloadWorldAudioSources } from "./spatial-audio.js";
 
 // Multiplayer session management
@@ -92,10 +91,6 @@ initVRChat(protoScene.getScene(), localFrame, camera, renderer);
 // ========== VR Commentary Setup ==========
 // Initialize VR commentary panel for cinema mode (3D text visible in VR)
 initVRCommentary(protoScene.getScene(), camera);
-
-// ========== VR Playback Controls Setup ==========
-// Initialize VR playback button for controlling movie playback in VR
-initVRPlaybackControls(protoScene.getScene(), localFrame, renderer);
 
 // ========== Multiplayer Session Setup ==========
 // Initialize session manager for multiplayer watch parties
@@ -443,36 +438,6 @@ if (hasWorldFoundryDisplays(rootworld) || true) { // Always show for now
         return toggleCinemaMode(currentWorldUrl);
     });
     
-    // Listen for cinema mode changes to show/hide playback buttons
-    onCinemaModeChange((isActive, worldUrl) => {
-        if (isActive) {
-            // Only show playback buttons for host (not viewers)
-            // Viewers can't control playback - host syncs pause/play to them
-            if (!SessionManager.inSession() || SessionManager.isHosting()) {
-                const screenPosition = getFoundryScreenPosition(worldUrl);
-                const screenRotation = getFoundryScreenRotation(worldUrl);
-                const displayConfig = getFoundryDisplayConfig(worldUrl);
-                
-                if (screenPosition) {
-                    // VR button (3D in scene)
-                    showVRPlaybackButton(
-                        worldUrl,
-                        screenPosition,
-                        screenRotation,
-                        0,
-                        displayConfig?.vrPlaybackButton
-                    );
-                    
-                    // Desktop button (2D overlay)
-                    showDesktopPlaybackButton(worldUrl, 0);
-                }
-            }
-        } else {
-            // Hide playback buttons when cinema mode ends
-            hideVRPlaybackButton();
-            hideDesktopPlaybackButton();
-        }
-    });
 }
 
 // ========== Resize Handler ==========
@@ -509,8 +474,6 @@ const animationLoop = createAnimationLoop({
         updateCharacterSync(time);
         // Update VR chat system (keyboard/panel interaction)
         updateVRChat(renderer);
-        // Update VR playback controls (pause/play button interaction)
-        updateVRPlaybackControls(renderer);
     },
     updateFoundry: (time) => updateFoundryDisplays(time),
     animatePortal: config.portals.animatePortal,

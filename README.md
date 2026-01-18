@@ -7,25 +7,35 @@
   <img src="docs/images/header4.png" width="24%" />
 </p>
 
-A WebXR metaverse built with Three.js and Gaussian Splatting. Explore vast, interconnected 3D worlds through portals, interact with AI characters, watch movies together, and experience physics-based movement in VR.
+A Web/Mobile/VR (WebXR) metaverse built with Sparkjs and treejs.
 
 ## Features
 
-- **Infinite Gaussian Splat Universes** - Dynamically load arbitrarily large worlds using SparkJS. Worlds are streamed on-demand as you explore, with automatic loading/unloading based on proximity.
+- **Infinite Gaussian Splat Universes** - Dynamically load arbitrarily large
+worlds using SparkJS. Worlds are streamed on-demand as you explore, with
+automatic loading/unloading based on proximity.
 
-- **Portal System** - Seamless travel between interconnected worlds via bidirectional portals. The universe is structured as a directed graph, loading worlds up to N hops away.
+- **Portal System** - Connect worlds by portals supporting distributed hosting.
+World DAG can pre-fetch up to N hops.
 
-- **Physics & Collisions** - Rapier.js physics with collision meshes. Thrust-based movement that bounces off walls and surfaces.
+- **Physics & Collisions** - Rapier.js physics with collision meshes. 
 
-- **AI Characters** - NPCs with state machines, waypoint-based navigation, and AI-powered conversations via Braintrust. Characters react to player proximity and can provide movie commentary.
+- **Controls** - Intuitive controls for web, VR and mobile.
 
-- **WebXR/VR Support** - Full Quest 3 compatibility with physics-based locomotion, VR keyboard, and 3D chat panels.
+- **AI Characters** - NPCs framework supporting chat, waypoint navigation, 
+and multi-model integration in VR. For example, NPCs can watch movies and
+comment on frames. 
 
-- **Movie & Screen Streaming** - Watch synchronized movies in VR theaters. Custom H.264 streaming via Foundry server with WebCodecs decoding.
+- **WebXR/VR Support** - Full Quest 3 compatibility with physics-based
+locomotion, VR keyboard, and 3D chat panels.
 
-- **Spatial Audio** - Positional audio sources placed throughout worlds, plus background music per world.
+- **Movie & Screen Streaming** - Support for desktop and window streaming. And video streaming into the 
+protoverse.
 
-- **Multiplayer** - Real-time sessions with ghost avatars. Host a viewing party and watch movies together with friends.
+- **Spatial Audio** - Positional audio sources placed throughout worlds, plus
+background music per world.
+
+- **Multiplayer** - Basic support for multiplayer with chat, shared positions, etc.
 
 ## Quick Start
 

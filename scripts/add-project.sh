@@ -67,8 +67,8 @@ export default {
     world: {
         // rootWorld: "/myworld/world.json",
     },
-    multiplayer: {
-        enabled: false,
+    urls: {
+        useCdn: false,  // Use local /worlds for development
     },
     debug: {
         showFps: true,

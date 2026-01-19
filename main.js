@@ -428,8 +428,8 @@ if (config.debug.physicsEnabled) {
     }
 }
 
-// Create Foundry toggle button if world has Foundry displays
-if (hasWorldFoundryDisplays(rootworld) || true) { // Always show for now
+// Create Foundry toggle button if cinema controls are enabled in config
+if (config.features.showCinemaControls) {
     createFoundryToggleButton(async () => {
         const currentWorldUrl = protoVerse.getCurrentWorldUrl() || rootworld;
         const result = await toggleFoundry(currentWorldUrl);

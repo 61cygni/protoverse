@@ -5,14 +5,9 @@
  */
 export default {
     world: {
-        rootWorld: "/cozyship/world.json",
-    },
-    multiplayer: {
-        enabled: false,
+        rootWorld: "/cozyship/helloworld.json",
     },
     debug: {
         showFps: true,
-        logWorldChanges: false,
-        logPortalCrossings: false,
     },
 };

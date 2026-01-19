@@ -61,14 +61,20 @@ const baseConfig = {
     // ========== URL / CDN Settings ==========
     urls: {
         // CDN base URL for assets (splats, collision meshes, etc.)
-        // Set VITE_CDN_URL in .env, or leave empty to use local /worlds
+        // Set VITE_CDN_URL in .env
         cdnBase: env('VITE_CDN_URL', ''),
         
-        // Local file base URL (used when cdnBase is empty)
+        // Local file base URL (used when useCdn is false or cdnBase is empty)
         localBase: "/worlds",
         
-        // Get the active URL base (CDN if set, otherwise local)
+        // Use CDN for assets (can be overridden by preset to force local)
+        // Set to false in a preset to always use local files regardless of VITE_CDN_URL
+        useCdn: true,
+        
+        // Get the active URL base
+        // Returns localBase if useCdn is false, otherwise cdnBase (or localBase if cdnBase is empty)
         get urlBase() {
+            if (!this.useCdn) return this.localBase;
             return this.cdnBase || this.localBase;
         }
     },
@@ -101,8 +107,8 @@ const baseConfig = {
     
     // ========== Multiplayer Settings ==========
     multiplayer: {
-        // Enable multiplayer features
-        enabled: true,
+        // Enable multiplayer features (set to true in preset for multiplayer worlds)
+        enabled: false,
         
         // WebSocket server URL
         // Set VITE_WS_URL in .env for production
@@ -141,6 +147,13 @@ const baseConfig = {
         projectName: "protoverse",
     },
     
+    // ========== Feature Toggles ==========
+    features: {
+        // Show cinema/movie controls (Foundry toggle, cinema mode, playback pause)
+        // Set to true in preset for worlds with video displays (e.g., theater)
+        showCinemaControls: false,
+    },
+    
     // ========== Debug Settings ==========
     debug: {
         // Show FPS counter
@@ -170,6 +183,11 @@ export const config = deepMerge(baseConfig, preset);
 // Log active mode in development
 if (import.meta.env.DEV) {
     console.log(`[Config] Mode: ${MODE}${preset ? ` (preset applied)` : ''}`);
+    console.log(`[Config] urls.useCdn: ${config.urls.useCdn}, urlBase: ${config.urls.urlBase}`);
+    console.log(`[Config] world.rootWorld: ${config.world.rootWorld}`);
+    if (preset.world) {
+        console.log(`[Config] preset.world.rootWorld: ${preset.world.rootWorld}`);
+    }
 }
 
 /**

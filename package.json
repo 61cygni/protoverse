@@ -11,7 +11,9 @@
     "build:demo": "vite build --mode demo",
     "preview": "vite preview",
     "dev:helloworld": "vite --mode helloworld",
-    "build:helloworld": "vite build --mode helloworld"
+    "build:helloworld": "vite build --mode helloworld",
+    "dev:helloportal": "vite --mode helloportal",
+    "build:helloportal": "vite build --mode helloportal"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

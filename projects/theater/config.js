@@ -8,6 +8,12 @@ export default {
     world: {
         rootWorld: "/theatership/world.json",
     },
+    urls: {
+        useCdn: true,  // Use CDN for production assets
+    },
+    features: {
+        showCinemaControls: true,  // Theater has movie displays
+    },
     multiplayer: {
         enabled: true,
     },

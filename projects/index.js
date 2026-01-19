@@ -8,22 +8,27 @@
 import theater from './theater/config.js';
 import demo from './demo/config.js';
 import helloworld from './helloworld/config.js';
+import helloportal from './helloportal/config.js';
 
 export const presets = {
     theater,
     demo,
     helloworld,
+    helloportal,
 };
 
 /**
  * Deep merge utility - merges source into target recursively
+ * Preserves getters/setters from target object
  */
 export function deepMerge(target, source) {
-    const result = { ...target };
+    // Start with target's property descriptors to preserve getters
+    const targetDescriptors = Object.getOwnPropertyDescriptors(target);
+    const result = Object.defineProperties({}, targetDescriptors);
     
     for (const key in source) {
         if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            // Recursively merge objects
+            // Recursively merge objects, preserving target's getters
             result[key] = deepMerge(target[key] || {}, source[key]);
         } else {
             // Overwrite primitive values and arrays

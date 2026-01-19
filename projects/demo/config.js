@@ -8,8 +8,8 @@ export default {
     world: {
         rootWorld: "/cozyship/world.json",
     },
-    multiplayer: {
-        enabled: false,
+    urls: {
+        useCdn: false,  // Use local /worlds for development
     },
     debug: {
         showFps: true,

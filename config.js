@@ -4,20 +4,35 @@
  * Centralized configuration for the entire application.
  * Import this file to access all configuration options.
  * 
- * Environment variables (set in .env file):
+ * Configuration is built from:
+ *   1. Base config (defaults defined below)
+ *   2. Mode preset (from projects/{mode}/config.js based on --mode flag)
+ *   3. Environment variables (from .env and .env.[mode] files)
+ * 
+ * Usage:
+ *   npm run dev              # Default mode
+ *   npm run dev:theater      # Theater preset + .env.theater
+ *   npm run dev:demo         # Demo preset + .env.demo
+ * 
+ * Environment variables (set in .env or .env.[mode] files):
  *   VITE_WS_URL - WebSocket server URL for multiplayer
  *   VITE_CDN_URL - CDN base URL for assets
- *   VITE_CONVEX_URL - Convex HTTP URL for session discovery
+ *   VITE_CONVEX_HTTP_URL - Convex HTTP URL for session discovery
  *   VITE_PROTOVERSE_URL - Public URL for this app (used by lobby)
- *   VITE_BRAINTRUST_API_KEY - API key for AI chat
  * 
  * See .env.example for documentation.
  */
 
+import { presets, deepMerge } from './projects/index.js';
+
+// Current mode (set by vite --mode flag)
+const MODE = import.meta.env.MODE || 'development';
+
 // Helper to get env var with fallback
 const env = (key, fallback) => import.meta.env?.[key] || fallback;
 
-export const config = {
+// Base configuration (defaults)
+const baseConfig = {
     // ========== World Settings ==========
     world: {
         // Starting world (relative path from urlBase)
@@ -144,6 +159,18 @@ export const config = {
         physicsEnabled: true,
     },
 };
+
+// Apply mode preset (if any)
+const preset = presets[MODE] || {};
+
+// Final config: base merged with preset
+// Environment variables are already applied in baseConfig via env() calls
+export const config = deepMerge(baseConfig, preset);
+
+// Log active mode in development
+if (import.meta.env.DEV) {
+    console.log(`[Config] Mode: ${MODE}${preset ? ` (preset applied)` : ''}`);
+}
 
 /**
  * Helper to get a config value by dot-notation path

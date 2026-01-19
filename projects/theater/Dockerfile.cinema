@@ -1,8 +1,8 @@
-# Dockerfile for cinema deployments
+# Dockerfile for theater deployments
 # Builds foundry-player + ws-server with embedded movie
 #
-# Build context should be the cinema/<movie>/ directory
-# Movie file should be in cinema/<movie>/movie/<name>.mp4
+# Build context should be the projects/theater/<movie>/ directory
+# Movie file should be in projects/theater/<movie>/movie/<name>.mp4
 
 # =============================================================================
 # Stage 1: Build foundry-player from source

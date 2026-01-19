@@ -1,0 +1,16 @@
+/**
+ * Lobby Configuration
+ * 
+ * Copy this file to config.js and fill in your URLs.
+ * config.js is gitignored.
+ * 
+ * For local development, you can also override via URL params:
+ *   /lobby/?convex=https://...&protoverse=https://...
+ */
+
+// Your Convex HTTP URL (for session discovery + AI)
+// Get this from: npx convex dev (use .convex.site, not .convex.cloud)
+window.CONVEX_HTTP_URL = 'https://YOUR-DEPLOYMENT.convex.site';
+
+// Your Protoverse URL (main app)
+window.PROTOVERSE_URL = 'https://YOUR-APP.netlify.app';

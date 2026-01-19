@@ -14,7 +14,7 @@ set -e
 #   ./deploy.sh holygrail --app-name myapp   # Custom app name
 #
 # Directory structure expected:
-#   cinema/
+#   projects/theater/
 #   ├── holygrail/
 #   │   └── movie/
 #   │       └── holygrail.mp4
@@ -26,7 +26,7 @@ set -e
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROTOVERSE_ROOT="$(dirname "$SCRIPT_DIR")"
+PROTOVERSE_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Colors
 RED='\033[0;31m'

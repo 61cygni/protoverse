@@ -80,6 +80,97 @@ brew install awscli
 
 ---
 
+## Configuration System
+
+Protoverse uses a flexible configuration system with **presets** for different use cases.
+
+### Configuration Modes
+
+```bash
+npm run dev              # Default development mode
+npm run dev:theater      # Theater mode (multiplayer movie watching)
+npm run dev:demo         # Demo mode (single player, local assets)
+
+npm run build            # Default production build
+npm run build:theater    # Production build with theater preset
+```
+
+### How It Works
+
+Configuration is merged from two sources:
+
+1. **Environment files** (`.env`, `.env.theater`, `.env.demo`) - URLs and secrets
+2. **Config presets** (`configs/*.js`) - App behavior settings
+
+```
+.env                    # Shared defaults (all modes)
+.env.theater            # Theater-specific URLs
+.env.demo               # Demo-specific URLs
+
+projects/
+├── index.js            # Preset registry
+├── theater/
+│   └── config.js       # Theater preset (multiplayer, no FPS)
+├── demo/
+│   └── config.js       # Demo preset (single player)
+└── helloworld/
+    └── config.js       # Example project
+```
+
+### Creating a New Project/Mode
+
+Use the helper script:
+
+```bash
+./scripts/add-project.sh myproject
+```
+
+This creates:
+- `projects/myproject/config.js` - Config preset
+- `projects/myproject/README.md` - Project documentation
+- `.env.myproject.example` - Environment template  
+- Adds `npm run dev:myproject` and `build:myproject` scripts
+
+Then customize:
+1. Edit `projects/myproject/config.js` to override settings
+2. Copy `.env.myproject.example` to `.env.myproject` for URLs
+3. Run `npm run dev:myproject`
+
+### Multiple World Configs
+
+You can have multiple world JSON files in the same directory:
+
+```
+public/worlds/cozyship/
+├── world.json           # Default config
+├── helloworld.json      # Custom variant
+├── splats/              # Shared assets
+└── collision-mesh.glb
+```
+
+Then point to different configs:
+```javascript
+// configs/helloworld.js
+export default {
+    world: {
+        rootWorld: "/cozyship/helloworld.json",
+    },
+};
+```
+
+### Key Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_WS_URL` | Multiplayer WebSocket | `wss://app.fly.dev:8765` |
+| `VITE_CDN_URL` | CDN for assets (empty = local) | `https://cdn.example.com` |
+| `VITE_CONVEX_HTTP_URL` | Convex HTTP endpoint | `https://xxx.convex.site` |
+| `VITE_PROTOVERSE_URL` | Public app URL | `https://app.netlify.app` |
+
+See `.env.example` for full documentation.
+
+---
+
 ## Part 1: Convex (Session Registry + AI Proxy)
 
 Convex provides two services:
@@ -151,7 +242,7 @@ Your production HTTP URL will look like: `https://your-prod-name-123.convex.site
 
 #### 3. Update Fly.io Apps
 
-Update each Fly.io cinema backend to use the production Convex URL:
+Update each Fly.io theater backend to use the production Convex URL:
 
 ```bash
 # List your theater apps
@@ -321,7 +412,7 @@ cd ~/projects/foundry
 ### Setup a New Movie
 
 ```bash
-cd /path/to/protoverse/cinema
+cd /path/to/protoverse/projects/theater
 
 # 1. Transcode the movie (recommended)
 cd ~/projects/foundry
@@ -329,7 +420,7 @@ cd ~/projects/foundry
 # Creates: original-movie_480p_500k.mp4
 
 # 2. Create movie directory and copy transcoded file
-cd /path/to/protoverse/cinema
+cd /path/to/protoverse/projects/theater
 mkdir -p mymovie/movie
 cp ~/projects/foundry/original-movie_480p_500k.mp4 mymovie/movie/mymovie.mp4
 
@@ -355,7 +446,7 @@ EOF
 ### Directory Structure
 
 ```
-cinema/
+projects/theater/
 ├── mymovie/
 │   ├── movie/
 │   │   └── mymovie.mp4        # The video file
@@ -559,13 +650,13 @@ The lobby will be available at: `https://cozytheatership.netlify.app/lobby/`
 cd ~/projects/foundry
 ./transcode.sh --small /path/to/original-movie.mp4
 
-# 2. Prepare cinema directory
+# 2. Prepare theater directory
 cd /path/to/protoverse
-mkdir -p cinema/mymovie/movie
-cp ~/projects/foundry/original-movie_480p_500k.mp4 cinema/mymovie/movie/mymovie.mp4
+mkdir -p projects/theater/mymovie/movie
+cp ~/projects/foundry/original-movie_480p_500k.mp4 projects/theater/mymovie/movie/mymovie.mp4
 
 # 2. (Optional) Add movie metadata
-cat > cinema/mymovie/metadata.json << 'EOF'
+cat > projects/theater/mymovie/metadata.json << 'EOF'
 {
     "title": "My Movie Title",
     "description": "Brief description for Y-Bot AI commentary",
@@ -577,7 +668,7 @@ EOF
 ./theater-deploy.sh mymovie
 
 # Or just Fly.io backend:
-./cinema/deploy.sh mymovie
+./projects/theater/deploy.sh mymovie
 # (Convex is auto-configured!)
 
 # 4. Verify
@@ -677,7 +768,7 @@ fly secrets set START_TIME=300 -a protoverse-mymovie  # 5 minutes in
 
 2. **If 404**: Fly.io needs redeploy with updated foundry-player:
    ```bash
-   ./cinema/deploy.sh mymovie --no-cache
+   ./projects/theater/deploy.sh mymovie --no-cache
    ```
 
 3. **Check browser console** for fetch errors:
@@ -796,7 +887,7 @@ fly scale count 1 -a protoverse-mymovie # Ensure single machine
 fly machines restart -a protoverse-mymovie # Restart
 
 # Force rebuild (after foundry-player updates)
-./cinema/deploy.sh mymovie --no-cache
+./projects/theater/deploy.sh mymovie --no-cache
 ./theater-deploy.sh mymovie --no-cache
 
 # Control playback start time
@@ -812,9 +903,12 @@ npx convex logs                       # View function logs
 netlify deploy --prod --dir dist      # Deploy protoverse (includes lobby at /lobby/)
 
 # Local Development
-npm run dev                           # Start Vite dev server
+npm run dev                           # Default dev server
+npm run dev:theater                   # Theater mode (multiplayer enabled)
+npm run dev:demo                      # Demo mode (single player)
+./scripts/add-project.sh myproject    # Create new project preset
 node multiplayer/ws-server.js         # Start local WS server
-cd cinema && ./start-backend.sh movie.mp4  # Start WS + Foundry with movie
+cd projects/theater && ./start-backend.sh movie.mp4  # Start WS + Foundry with movie
 ```
 
 ---

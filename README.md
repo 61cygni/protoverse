@@ -47,18 +47,53 @@ npm run dev
 
 ## Configuration
 
-Copy `.env.example` to `.env` and customize:
+ProtoVerse supports multiple configuration modes for different use cases.
+
+### Quick Setup
 
 ```bash
 cp .env.example .env
+npm run dev
 ```
 
-Key settings:
-- `VITE_WS_URL` - Multiplayer WebSocket server URL
-- `VITE_CDN_URL` - CDN for world assets (leave empty for local)
-- `VITE_CONVEX_HTTP_URL` - Convex HTTP endpoint (session discovery + AI proxy)
+### Configuration Modes
 
-Edit `config.js` for additional options (world settings, physics, VR, etc.)
+```bash
+npm run dev              # Default development mode
+npm run dev:theater      # Theater mode (multiplayer movie watching)
+npm run dev:demo         # Demo mode (single player, local assets)
+
+npm run build:theater    # Production build for theater
+npm run build:demo       # Production build for demo
+```
+
+### How It Works
+
+Configuration comes from two sources that are merged:
+
+1. **Environment files** (`.env`, `.env.theater`, `.env.demo`) - URLs and secrets
+2. **Project presets** (`projects/{name}/config.js`) - App behavior settings
+
+```bash
+# Create mode-specific env files
+cp .env.theater.example .env.theater
+cp .env.demo.example .env.demo
+```
+
+### Adding New Projects
+
+Use the helper script:
+```bash
+./scripts/add-project.sh myproject
+```
+
+Or manually:
+1. Create `projects/myproject/config.js` with your overrides
+2. Add to `projects/index.js`: `import myproject from './myproject/config.js'`
+3. Create `.env.myproject` for URLs/secrets
+4. Add scripts to `package.json`: `"dev:myproject": "vite --mode myproject"`
+
+See `config.js` for all available options.
 
 ## AI Setup (Braintrust)
 
@@ -86,6 +121,11 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for full setup instruct
 
 ```
 ├── main.js              # Entry point
+├── config.js            # Main configuration (merges presets)
+├── projects/            # Project presets and extensions
+│   ├── theater/         # Theater project (config + cinema deployment)
+│   ├── demo/            # Demo project
+│   └── index.js         # Preset registry
 ├── proto.js             # World/portal management
 ├── scene.js             # Three.js scene setup
 ├── characters/          # AI character definitions
@@ -93,7 +133,7 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for full setup instruct
 ├── multiplayer/         # Real-time multiplayer system
 ├── vr/                  # VR UI (keyboard, chat panels)
 ├── convex/              # Session tracking + AI proxy backend
-├── cinema/              # Movie theater deployment
+│   │   └── (deployment scripts, Dockerfile, movie dirs)
 └── public/worlds/       # World assets and configs
 ```
 

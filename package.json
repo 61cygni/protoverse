@@ -4,8 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:theater": "vite --mode theater",
+    "dev:demo": "vite --mode demo",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:theater": "vite build --mode theater",
+    "build:demo": "vite build --mode demo",
+    "preview": "vite preview",
+    "dev:helloworld": "vite --mode helloworld",
+    "build:helloworld": "vite build --mode helloworld"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

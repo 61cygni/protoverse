@@ -1,4 +1,4 @@
-# Protoverse Cinema
+# Protoverse Theater
 
 Deploy movies for streaming in Protoverse with a single command.
 
@@ -11,7 +11,7 @@ cd ~/projects/foundry
 # Creates: original-movie_480p_500k.mp4
 
 # 2. Create a movie directory
-cd /path/to/protoverse/cinema
+cd /path/to/protoverse/projects/theater
 mkdir -p mymovie/movie
 
 # 3. Add your transcoded movie file
@@ -33,7 +33,8 @@ EOF
 ## Directory Structure
 
 ```
-cinema/
+projects/theater/
+├── config.js              # Theater project config preset
 ├── deploy.sh              # Deploy single movie to Fly.io
 ├── theater-deploy.sh      # Full deployment (Fly.io + Netlify + CDN)
 ├── list-theaters.sh       # List all deployed theaters

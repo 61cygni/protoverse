@@ -12,6 +12,9 @@ public/worlds/
 .env
 .env.local
 .env.*.local
+.env.theater
+.env.demo
+# Note: .env.*.example files ARE committed (templates)
 
 
 # Editor directories and files

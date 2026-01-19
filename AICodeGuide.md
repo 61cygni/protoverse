@@ -387,10 +387,10 @@ WS server calls session endpoints via `CONVEX_HTTP_URL` environment variable.
 
 ## Cinema Deployment
 
-The `cinema/` directory contains everything for deploying movie theaters:
+The `projects/theater/` directory contains everything for deploying movie theaters:
 
 ```
-cinema/
+projects/theater/
 ├── deploy.sh              # Build & deploy Fly.io backend
 ├── theater-deploy.sh      # Full deployment (CDN + Fly + Netlify)
 ├── list-theaters.sh       # List deployed Fly.io instances
@@ -409,13 +409,13 @@ cinema/
 **Deploy a new movie:**
 ```bash
 # Full deployment (uploads CDN, builds Fly, deploys Netlify)
-./cinema/theater-deploy.sh bigtrouble
+./projects/theater/theater-deploy.sh bigtrouble
 
 # Or just the Fly.io backend
-./cinema/deploy.sh bigtrouble --app-name protoverse-bigtrouble
+./projects/theater/deploy.sh bigtrouble --app-name protoverse-bigtrouble
 ```
 
-**Movie metadata** (`cinema/<movie>/metadata.json`):
+**Movie metadata** (`projects/theater/<movie>/metadata.json`):
 ```json
 {
   "title": "Big Trouble in Little China",
@@ -690,9 +690,9 @@ setConfig('debug.showFps', true);
 ## Testing & Development
 
 - **Local frontend**: `npm run dev` (Vite dev server)
-- **Local backend**: `./cinema/start-backend.sh <movie>` (WS server + Foundry)
+- **Local backend**: `./projects/theater/start-backend.sh <movie>` (WS server + Foundry)
 - **VR testing**: Quest 3 browser → `http://<local-ip>:3000`
-- **VR USB debugging**: `./cinema/setup-local-vr.sh` (ADB port forwarding)
+- **VR USB debugging**: `./projects/theater/setup-local-vr.sh` (ADB port forwarding)
 - **Collision mesh editing**: `tools/collision-editor.html`
 - **Physics tuning**: Adjust `physics-config.js`
 
@@ -714,19 +714,19 @@ See `docs/deployment-guide.md` for comprehensive instructions.
 | Component | Platform | Command |
 |-----------|----------|---------|
 | Frontend | Netlify | `netlify deploy --prod` |
-| Cinema Backend | Fly.io | `./cinema/deploy.sh <movie>` |
+| Cinema Backend | Fly.io | `./projects/theater/deploy.sh <movie>` |
 | Session Registry | Convex | `npx convex deploy` |
 | Assets | Tigris CDN | `scripts/local/upload-worlds-to-tigris.sh` |
 
 **Full deployment:**
 ```bash
-./cinema/theater-deploy.sh bigtrouble --netlify-site cozytheatership
+./projects/theater/theater-deploy.sh bigtrouble --netlify-site cozytheatership
 ```
 
 **Directory Structure:**
 ```
 scripts/local/           # User-specific scripts (gitignored)
-cinema/                  # Theater deployment scripts
+projects/theater/                  # Theater deployment scripts
 convex/                  # Convex backend functions
 public/lobby/            # Session browser (deployed with frontend)
 docs/deployment-guide.md # Detailed deployment docs

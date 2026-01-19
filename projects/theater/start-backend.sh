@@ -18,7 +18,7 @@
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROTOVERSE_ROOT="$(dirname "$SCRIPT_DIR")"
+PROTOVERSE_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Ports (must match config.js and world.json)
 VITE_PORT=3000      # Vite dev server (frontend)

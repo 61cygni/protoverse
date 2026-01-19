@@ -207,7 +207,7 @@ export function createAnimationLoop({
     let lastTime = performance.now();
     
     return function animate(time, xrFrame) {
-        stats.begin();
+        stats?.begin();
         
         // Calculate delta time in seconds
         const deltaTime = (time - lastTime) / 1000;
@@ -259,7 +259,7 @@ export function createAnimationLoop({
         // Update portals and render
         updatePortals();
 
-        stats.end();
+        stats?.end();
     };
 }
 

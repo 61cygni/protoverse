@@ -25,12 +25,12 @@ set -e
 #   - fly CLI installed and authenticated
 #   - netlify CLI installed and authenticated
 #   - AWS CLI configured for Tigris (or TIGRIS_ACCESS_KEY_ID/TIGRIS_SECRET_ACCESS_KEY set)
-#   - Movie directory exists in <movie-name>/movie/ (relative to cinema/)
+#   - Movie directory exists in <movie-name>/movie/ (relative to projects/theater/)
 #
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROTOVERSE_ROOT="$(dirname "$SCRIPT_DIR")"
+PROTOVERSE_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 cd "$SCRIPT_DIR"
 
 # Colors
@@ -137,7 +137,7 @@ MOVIE_DIR="$SCRIPT_DIR/$MOVIE_NAME"
 if [ ! -d "$MOVIE_DIR" ]; then
     echo -e "${RED}Error: Movie directory not found: $MOVIE_DIR${NC}"
     echo ""
-    echo "Available movies in cinema/:"
+    echo "Available movies in projects/theater/:"
     ls -1 "$SCRIPT_DIR" 2>/dev/null | grep -v -E '\.sh$|\.toml$|\.md$|^foundry-player$' || echo "  (none)"
     exit 1
 fi

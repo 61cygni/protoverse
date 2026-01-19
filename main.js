@@ -238,7 +238,9 @@ showLoading('Loading world data...');
 
 // Load initial world data for camera position, then use DAG to load everything
 updateLoading(10, 'Loading world configuration...');
-const initialWorldData = await loadWorldJSON(resolveUrl(rootworld));
+const resolvedRootUrl = resolveUrl(rootworld);
+console.log(`[Main] Fetching root world: ${rootworld} -> ${resolvedRootUrl}`);
+const initialWorldData = await loadWorldJSON(resolvedRootUrl);
 console.log("main.js: initialWorldData loaded:");
 console.log("  keys:", Object.keys(initialWorldData));
 console.log("  collisionUrl:", initialWorldData.collisionUrl);

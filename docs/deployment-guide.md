@@ -53,8 +53,9 @@ This guide covers the full deployment of Protoverse Theater, a multiplayer VR mo
 |-----------|---------|---------|-------------|
 | **Protoverse App** | Main 3D experience | Netlify | `cozytheatership.netlify.app` |
 | **Lobby** | Session discovery | Netlify (same site) | `cozytheatership.netlify.app/lobby/` |
+| **Purgatory** | World browser | Netlify (separate) | `purgatory.netlify.app` |
 | **Cinema Backend** | WS + Video streaming | Fly.io | `protoverse-{movie}.fly.dev` |
-| **Convex** | Session registry + AI proxy | Convex Cloud | `{deployment}.convex.site` |
+| **Convex** | Session + World registry, AI proxy | Convex Cloud | `{deployment}.convex.site` |
 | **Tigris** | Asset CDN | Tigris/S3 | `public-spz.t3.storage.dev` |
 
 ---
@@ -565,12 +566,40 @@ cd /path/to/protoverse
 cp public/lobby/config.js.example public/lobby/config.js
 # Edit public/lobby/config.js with your production URLs
 
-# Build
+# Build and deploy (default preset)
 npm run build
-
-# Deploy to Netlify
 netlify deploy --prod --dir dist
 ```
+
+### Deploying Different Projects
+
+You can deploy different project presets without editing `netlify.toml`:
+
+```bash
+# Build with specific project preset, then deploy
+npm run build:worldship && netlify deploy --prod --dir dist
+npm run build:theater && netlify deploy --prod --dir dist
+npm run build:helloworld && netlify deploy --prod --dir dist
+
+# Or for any project:
+npm run build:<project> && netlify deploy --prod --dir dist
+```
+
+**Available build commands:**
+- `npm run build:theater` - Theater mode (multiplayer movie watching)
+- `npm run build:worldship` - Worldship mode (space exploration)
+- `npm run build:helloworld` - Hello World demo
+- `npm run build:demo` - Demo mode (single player)
+
+**For Netlify CI (auto-builds):** Either:
+1. Edit `netlify.toml` to use your project's build command:
+   ```toml
+   [build]
+     command = "npm run build:worldship"
+   ```
+2. Or set `VITE_PRESET` environment variable in Netlify:
+   - Site settings → Environment variables → Add: `VITE_PRESET=worldship`
+   - This works with the default `npm run build` command
 
 Or use the all-in-one script:
 
@@ -638,6 +667,181 @@ The lobby will be available at: `https://cozytheatership.netlify.app/lobby/`
 2. Create a session in Protoverse
 3. Session should appear in lobby within 10 seconds
 4. Click "Join Party" should open Protoverse with session pre-filled
+
+---
+
+## Part 6: World Registry & Protoverse Purgatory
+
+The World Registry is a Convex-powered directory of all deployed Protoverse worlds. "Protoverse Purgatory" is a standalone web app for browsing and entering registered worlds.
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         WORLD REGISTRY ARCHITECTURE                          │
+│                                                                              │
+│  ┌─────────────────────┐      ┌─────────────────────┐                       │
+│  │  Protoverse         │      │  Protoverse         │                       │
+│  │  Purgatory          │      │  (Any World)        │                       │
+│  │  purgatory.         │      │  myworld.           │                       │
+│  │  netlify.app        │      │  netlify.app        │                       │
+│  └──────────┬──────────┘      └──────────┬──────────┘                       │
+│             │                            │                                   │
+│             │ GET /worlds                │ register-world.js                │
+│             ▼                            ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                         CONVEX                                       │    │
+│  │  worlds table:           worldServices table:                        │    │
+│  │  • name, slug            • worldId                                   │    │
+│  │  • url, rootWorld        • type (multiplayer/streaming/ai)           │    │
+│  │  • description           • url, flyAppName                           │    │
+│  │  • thumbnail, tags                                                   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Registering a World
+
+After deploying a world to Netlify, register it with the registry:
+
+```bash
+# Basic registration (pulls name/description from world.json)
+npm run register-world -- \
+  --url "https://myworld.netlify.app" \
+  --world "/myworld/world.json"
+
+# With multiplayer and streaming services
+npm run register-world -- \
+  --url "https://cozytheatership.netlify.app/?ws=wss://protoverse-holygrail.fly.dev:8765&foundry=wss://protoverse-holygrail.fly.dev/ws" \
+  --world "/theatership/world.json" \
+  --tags "movie,multiplayer,social"
+
+# Dry run (preview what will be registered)
+npm run register-world -- \
+  --url "https://myworld.netlify.app" \
+  --world "/myworld/world.json" \
+  --dry
+```
+
+The script:
+1. Parses the URL and extracts `?ws=` and `?foundry=` service params
+2. Fetches `world.json` from the deployment (or CDN)
+3. Extracts `name`, `description`, and `thumbnail` from the JSON
+4. Auto-generates a URL-safe slug from the name
+5. Auto-detects thumbnail if not specified (looks for `thumbnail.png` next to `world.json`)
+6. Registers the world and any services with Convex
+
+### Updating or Deleting Worlds
+
+```bash
+# Update an existing world (same options as register)
+npm run register-world -- --update \
+  --url "https://myworld.netlify.app" \
+  --world "/myworld/world.json"
+
+# Delete a world by slug
+npm run register-world -- --delete --slug "my-world"
+```
+
+### World.json Fields for Registry
+
+Add these fields to your `world.json` for better registry entries:
+
+```json
+{
+  "name": "My Awesome World",
+  "description": "A brief description for the world browser",
+  "thumbnail": "/myworld/thumbnail.png",
+  "splatUrl": "/myworld/splats/world-lod-0.spz",
+  ...
+}
+```
+
+### Thumbnails
+
+Thumbnails are displayed in the Purgatory world browser. You can provide them in three ways (in priority order):
+
+1. **CLI flag**: `--thumbnail "https://cdn.example.com/thumb.png"`
+2. **world.json field**: `"thumbnail": "/myworld/thumbnail.png"`
+3. **Auto-detect**: Place `thumbnail.png` (or `.jpg`/`.webp`) next to your `world.json`
+
+Recommended size: 400×225 pixels (16:9 aspect ratio)
+
+**Uploading thumbnails to CDN:**
+
+```bash
+# Upload everything including thumbnails (but skip large .spz files)
+./scripts/local/upload-worlds-to-tigris.sh --world myworld --no-splats
+
+# Upload everything including .spz splats
+./scripts/local/upload-worlds-to-tigris.sh --world myworld
+```
+
+### API Endpoints
+
+The registry exposes these HTTP endpoints on Convex:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/worlds` | List all registered worlds |
+| `POST` | `/worlds` | Register a new world |
+| `GET` | `/worlds/by-slug?slug=xxx` | Get world by slug (with services) |
+| `PATCH` | `/worlds/by-slug?slug=xxx` | Update a world |
+| `DELETE` | `/worlds/by-slug?slug=xxx` | Remove a world |
+| `GET` | `/worlds/services?slug=xxx` | List services for a world |
+| `POST` | `/worlds/services?slug=xxx` | Register a service |
+| `DELETE` | `/worlds/services?slug=xxx&type=yyy&url=zzz` | Remove a service |
+
+### Deploying Protoverse Purgatory
+
+Protoverse Purgatory is a standalone site in `purgatory/`:
+
+```bash
+cd purgatory
+
+# 1. Create config
+cp config.js.example config.js
+
+# 2. Edit config.js with your Convex URL
+echo "window.CONVEX_HTTP_URL = 'https://your-deployment.convex.site';" > config.js
+
+# 3. Test locally
+npx serve .
+
+# 4. Deploy to Netlify
+netlify deploy --prod
+```
+
+Or for build-time config injection:
+
+```toml
+# purgatory/netlify.toml
+[build]
+  command = "echo \"window.CONVEX_HTTP_URL = '$CONVEX_HTTP_URL';\" > config.js"
+  publish = "."
+```
+
+Then set `CONVEX_HTTP_URL` in Netlify environment variables.
+
+### Verify Registry
+
+```bash
+# List all worlds
+curl https://your-deployment.convex.site/worlds
+
+# Get a specific world with services
+curl "https://your-deployment.convex.site/worlds/by-slug?slug=cozy-theatership"
+```
+
+### Purgatory Features
+
+- 🌀 Dark, atmospheric "liminal space" theme
+- 🔍 Search by name, description, or tags
+- 🏷️ Filter by tags
+- 👥 Multiplayer service indicator
+- 🎬 Streaming service indicator
+- 🤖 AI service indicator
+- ✨ Click any world to enter
 
 ---
 
@@ -871,6 +1075,18 @@ PROTOVERSE_URL=https://mysite.netlify.app ./list-theaters.sh
 ## Useful Commands
 
 ```bash
+# World Registry
+npm run register-world -- --url "https://myworld.netlify.app" --world "/myworld/world.json"
+npm run register-world -- --url "https://..." --world "/..." --tags "demo,social"
+npm run register-world -- --update --url "https://..." --world "/..."  # Update existing
+npm run register-world -- --delete --slug "my-world"                   # Delete by slug
+npm run register-world -- --url "https://..." --world "/..." --dry     # Preview only
+
+# Upload to Tigris CDN
+./scripts/local/upload-worlds-to-tigris.sh --world myworld             # All files
+./scripts/local/upload-worlds-to-tigris.sh --world myworld --no-splats # Skip .spz files
+./scripts/local/upload-worlds-to-tigris.sh --world myworld --json-only # Only .json files
+
 # Transcode movies (in ~/projects/foundry)
 ./transcode.sh --small movie.mp4      # 480p @ 500k (recommended)
 ./transcode.sh --medium movie.mp4     # 720p @ 1M

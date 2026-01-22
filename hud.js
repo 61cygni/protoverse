@@ -54,9 +54,21 @@ const collisionMeshListeners = new Set();
 /**
  * Create audio toggle button in upper left
  * @param {Function} onToggle - Callback function called when audio is toggled (receives new state: boolean)
+ * @param {boolean} initialEnabled - Initial audio state (default: false)
  */
-export function createAudioToggleButton(onToggle) {
+export function createAudioToggleButton(onToggle, initialEnabled = false) {
     audioToggleCallback = onToggle;
+    audioEnabled = initialEnabled;
+    
+    // If initially enabled, trigger the callback so audio system knows
+    // (Note: actual playback may still require user interaction due to browser policies)
+    if (initialEnabled && audioToggleCallback) {
+        // Delay slightly to ensure audio system is ready
+        setTimeout(() => {
+            audioToggleCallback(true);
+            audioListeners.forEach(callback => callback(true));
+        }, 100);
+    }
     
     const button = document.createElement("button");
     button.id = "audio-toggle";
@@ -253,9 +265,11 @@ const movementModeListeners = new Set();
  * Create movement mode toggle button (below collision mesh toggle)
  * Toggles between Thrust (zero-G) and Gravity Boots (walking)
  * @param {Function} onToggle - Callback function called when mode is toggled (receives new mode)
+ * @param {string} initialMode - Initial movement mode: 'weightless' or 'gravityBoots' (default: 'gravityBoots')
  */
-export function createMovementModeToggleButton(onToggle) {
+export function createMovementModeToggleButton(onToggle, initialMode = 'gravityBoots') {
     movementModeToggleCallback = onToggle;
+    movementMode = initialMode;
     
     const button = document.createElement("button");
     button.id = "movement-mode-toggle";
@@ -356,9 +370,11 @@ const ghostModeListeners = new Set();
  * Create ghost mode toggle button (below movement mode toggle)
  * Ghost mode disables gravity and collisions
  * @param {Function} onToggle - Callback function called when ghost mode is toggled
+ * @param {boolean} initialEnabled - Initial ghost mode state (default: true)
  */
-export function createGhostModeToggleButton(onToggle) {
+export function createGhostModeToggleButton(onToggle, initialEnabled = true) {
     ghostModeToggleCallback = onToggle;
+    ghostModeEnabled = initialEnabled;
     
     const button = document.createElement("button");
     button.id = "ghost-mode-toggle";

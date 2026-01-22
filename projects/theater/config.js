@@ -13,6 +13,7 @@ export default {
     },
     features: {
         showCinemaControls: true,  // Theater has movie displays
+        showSessionBrowser: true,  // Show list of active sessions to join
     },
     multiplayer: {
         enabled: true,

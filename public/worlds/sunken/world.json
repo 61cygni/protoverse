@@ -1,7 +1,12 @@
 {
   "name": "Sunken Ship",
+  "description": "An underwater shipwreck to explore",
+  "thumbnail": "/sunken/thumbnail.png",
   "splatUrl": "/sunken/splats/sunken-lod-0.spz",
   "collisionUrl": "/sunken/sunken.glb",
+  "bgAudioUrl": "/sunken/sunken-bg.mp3",
+  "position": [16.13, 17.10, 21.39],
+  "rotation": [0, 0.0, 0, -0.7],
   "portals": [
   ]
 }

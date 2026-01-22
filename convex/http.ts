@@ -93,6 +93,26 @@ http.route({
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
+/**
+ * OPTIONS /sessions - CORS preflight
+ */
+http.route({
+  path: "/sessions",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   }),
@@ -171,6 +191,316 @@ http.route({
   path: "/ai/stream",
   method: "OPTIONS",
   handler: aiOptions,
+});
+
+// ========== World Registry ==========
+// Public endpoints for browsing registered Protoverse worlds
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+/**
+ * GET /worlds
+ * List all registered worlds
+ */
+http.route({
+  path: "/worlds",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const worlds = await ctx.runQuery(api.worlds.list, {});
+    
+    return new Response(JSON.stringify(worlds), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }),
+});
+
+/**
+ * POST /worlds
+ * Register a new world
+ */
+http.route({
+  path: "/worlds",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      
+      const result = await ctx.runMutation(api.worlds.register, {
+        name: body.name,
+        url: body.url,
+        rootWorld: body.rootWorld,
+        slug: body.slug,
+        description: body.description,
+        cdnUrl: body.cdnUrl,
+        thumbnail: body.thumbnail,
+        tags: body.tags,
+      });
+      
+      return new Response(JSON.stringify(result), {
+        status: 201,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/worlds",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }),
+});
+
+/**
+ * GET /worlds/:slug
+ * Get a world by slug (with services)
+ */
+http.route({
+  path: "/worlds/by-slug",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const slug = url.searchParams.get("slug");
+    
+    if (!slug) {
+      return new Response(JSON.stringify({ error: "slug parameter required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    
+    const world = await ctx.runQuery(api.worlds.getWithServices, { slug });
+    
+    if (!world) {
+      return new Response(JSON.stringify({ error: "World not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    
+    return new Response(JSON.stringify(world), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }),
+});
+
+http.route({
+  path: "/worlds/by-slug",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }),
+});
+
+/**
+ * PATCH /worlds/by-slug?slug=xxx
+ * Update a world
+ */
+http.route({
+  path: "/worlds/by-slug",
+  method: "PATCH",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const slug = url.searchParams.get("slug");
+      
+      if (!slug) {
+        return new Response(JSON.stringify({ error: "slug parameter required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      const body = await request.json();
+      
+      const result = await ctx.runMutation(api.worlds.update, {
+        slug,
+        name: body.name,
+        description: body.description,
+        url: body.url,
+        rootWorld: body.rootWorld,
+        cdnUrl: body.cdnUrl,
+        thumbnail: body.thumbnail,
+        tags: body.tags,
+      });
+      
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }),
+});
+
+/**
+ * DELETE /worlds/by-slug?slug=xxx
+ * Remove a world
+ */
+http.route({
+  path: "/worlds/by-slug",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const slug = url.searchParams.get("slug");
+      
+      if (!slug) {
+        return new Response(JSON.stringify({ error: "slug parameter required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      const result = await ctx.runMutation(api.worlds.remove, { slug });
+      
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 404,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }),
+});
+
+// ========== World Services ==========
+
+/**
+ * GET /worlds/services?slug=xxx
+ * List services for a world
+ */
+http.route({
+  path: "/worlds/services",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const slug = url.searchParams.get("slug");
+    
+    if (!slug) {
+      return new Response(JSON.stringify({ error: "slug parameter required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    
+    const services = await ctx.runQuery(api.worldServices.listByWorld, { worldSlug: slug });
+    
+    return new Response(JSON.stringify(services), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }),
+});
+
+/**
+ * POST /worlds/services?slug=xxx
+ * Register a service for a world
+ */
+http.route({
+  path: "/worlds/services",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const slug = url.searchParams.get("slug");
+      
+      if (!slug) {
+        return new Response(JSON.stringify({ error: "slug parameter required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      const body = await request.json();
+      
+      const result = await ctx.runMutation(api.worldServices.register, {
+        worldSlug: slug,
+        type: body.type,
+        url: body.url,
+        flyAppName: body.flyAppName,
+        name: body.name,
+        metadata: body.metadata,
+      });
+      
+      return new Response(JSON.stringify(result), {
+        status: 201,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/worlds/services",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }),
+});
+
+/**
+ * DELETE /worlds/services?slug=xxx&type=yyy&url=zzz
+ * Remove a service by type and URL
+ */
+http.route({
+  path: "/worlds/services",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const slug = url.searchParams.get("slug");
+      const type = url.searchParams.get("type") as "multiplayer" | "streaming" | "ai";
+      const serviceUrl = url.searchParams.get("url");
+      
+      if (!slug || !type || !serviceUrl) {
+        return new Response(JSON.stringify({ error: "slug, type, and url parameters required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      
+      const result = await ctx.runMutation(api.worldServices.removeByTypeAndUrl, {
+        worldSlug: slug,
+        type,
+        url: serviceUrl,
+      });
+      
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 404,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }),
 });
 
 export default http;

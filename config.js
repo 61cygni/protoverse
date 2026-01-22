@@ -26,7 +26,14 @@
 import { presets, deepMerge } from './projects/index.js';
 
 // Current mode (set by vite --mode flag)
-const MODE = import.meta.env.MODE || 'development';
+// For production builds (e.g., Netlify), you can override with VITE_PRESET or VITE_PROJECT.
+// __PROTOVERSE_MODE__ is injected by vite.config.js from the --mode flag
+const MODE =
+    import.meta.env.VITE_PRESET ||
+    import.meta.env.VITE_PROJECT ||
+    (typeof __PROTOVERSE_MODE__ !== 'undefined' ? __PROTOVERSE_MODE__ : null) ||
+    import.meta.env.MODE ||
+    'development';
 
 // Helper to get env var with fallback
 const env = (key, fallback) => import.meta.env?.[key] || fallback;
@@ -138,6 +145,18 @@ const baseConfig = {
         thrustVolume: 0.5,
     },
     
+    // ========== Physics Settings ==========
+    physics: {
+        // Enable physics on startup
+        enabled: true,
+        
+        // Starting movement mode: 'weightless' (thrust) or 'gravityBoots' (walking)
+        movementMode: 'gravityBoots',
+        
+        // Ghost mode: pass through walls
+        ghostMode: true,
+    },
+    
     // ========== AI Settings ==========
     ai: {
         // Enable AI chat features (requires VITE_BRAINTRUST_API_KEY)
@@ -152,6 +171,8 @@ const baseConfig = {
         // Show cinema/movie controls (Foundry toggle, cinema mode, playback pause)
         // Set to true in preset for worlds with video displays (e.g., theater)
         showCinemaControls: false,
+        // Show session browser panel (list of active sessions to join)
+        showSessionBrowser: false,
     },
     
     // ========== Debug Settings ==========
@@ -180,9 +201,12 @@ const preset = presets[MODE] || {};
 // Environment variables are already applied in baseConfig via env() calls
 export const config = deepMerge(baseConfig, preset);
 
-// Log active mode in development
+// Log active mode (always, for debugging deployment issues)
+console.log(`[Config] Mode: ${MODE}${preset ? ` (preset applied)` : ''}`);
+console.log(`[Config] multiplayer.enabled: ${config.multiplayer.enabled}`);
+
+// Additional logging in development
 if (import.meta.env.DEV) {
-    console.log(`[Config] Mode: ${MODE}${preset ? ` (preset applied)` : ''}`);
     console.log(`[Config] urls.useCdn: ${config.urls.useCdn}, urlBase: ${config.urls.urlBase}`);
     console.log(`[Config] world.rootWorld: ${config.world.rootWorld}`);
     if (preset.world) {

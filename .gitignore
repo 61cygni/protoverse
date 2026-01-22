@@ -47,3 +47,6 @@ convex/_generated/
 # Lobby config (user-specific URLs)
 lobby/config.js
 public/lobby/config.js
+
+# Purgatory config (user-specific URLs)
+purgatory/config.js

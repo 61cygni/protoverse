@@ -5,7 +5,10 @@
  */
 export default {
     world: {
-        rootWorld: "/cozyship/helloworld.json",
+        rootWorld: "/cyberroom/helloworld.json",
+    },
+    urls: {
+        useCdn: false,  // Use local /worlds for development
     },
     debug: {
         showFps: true,

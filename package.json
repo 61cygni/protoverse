@@ -7,13 +7,20 @@
     "dev:theater": "vite --mode theater",
     "dev:demo": "vite --mode demo",
     "build": "vite build",
-    "build:theater": "vite build --mode theater",
+    "build:theater": "VITE_PRESET=theater vite build --mode theater",
     "build:demo": "vite build --mode demo",
     "preview": "vite preview",
     "dev:helloworld": "vite --mode helloworld",
     "build:helloworld": "vite build --mode helloworld",
     "dev:helloportal": "vite --mode helloportal",
-    "build:helloportal": "vite build --mode helloportal"
+    "build:helloportal": "vite build --mode helloportal",
+    "dev:codeverse": "vite --mode codeverse",
+    "build:codeverse": "vite build --mode codeverse",
+    "register-world": "node scripts/register-world.js",
+    "dev:worldship": "vite --mode worldship",
+    "build:worldship": "VITE_PRESET=worldship vite build --mode worldship",
+    "dev:sunken": "vite --mode sunken",
+    "build:sunken": "vite build --mode sunken"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

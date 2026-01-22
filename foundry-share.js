@@ -1118,6 +1118,11 @@ export function isFoundryConnected(worldUrl, identifier = 0) {
  * Get Foundry URL for a display
  */
 export function getFoundryUrl(worldUrl, identifier = 0) {
+    // If there's a global override (custom movie URL), use that
+    if (window.FOUNDRY_URL_OVERRIDE) {
+        return window.FOUNDRY_URL_OVERRIDE;
+    }
+    
     const displays = worldFoundryDisplays.get(worldUrl);
     if (!displays || displays.length === 0) return null;
     

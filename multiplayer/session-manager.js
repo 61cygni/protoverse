@@ -63,6 +63,30 @@ function connect() {
     console.log('[SessionManager] Connected to server, wsUrl:', wsUrl);
     emit('onOpen');
     
+    // Execute pending create session if there is one (reconnected to new server for custom movie)
+    if (pendingCreateSession) {
+      console.log('[SessionManager] Found pending create session, executing...');
+      const { world, foundry, name, color, max } = pendingCreateSession;
+      pendingCreateSession = null;
+      
+      localName = name;
+      localColor = color;
+      worldUrl = world;
+      foundryUrl = foundry;
+      maxViewers = max || 8;
+      
+      console.log(`[SessionManager] Creating session: world="${world}", wsUrl=${wsUrl}`);
+      ws.send(JSON.stringify({
+        type: 'create-session',
+        worldUrl: world,
+        foundryUrl: foundry,
+        name,
+        color,
+        maxViewers,
+      }));
+      return;
+    }
+    
     // Execute pending join if there is one (user clicked join before WS was ready)
     if (pendingJoin) {
       console.log('[SessionManager] Found pending join, executing for session:', pendingJoin.sessionCode);
@@ -297,16 +321,52 @@ export function inWorld() {
   return !!worldUrl;
 }
 
+// Pending create session (used when reconnecting to new server)
+let pendingCreateSession = null;
+
+/**
+ * Reconnect to a different WebSocket server
+ * @param {string} newWsUrl - New WebSocket server URL
+ */
+export function reconnect(newWsUrl) {
+  if (newWsUrl === wsUrl && ws && ws.readyState === WebSocket.OPEN) {
+    console.log('[SessionManager] Already connected to:', wsUrl);
+    return;
+  }
+  
+  console.log(`[SessionManager] Reconnecting to new server: ${newWsUrl}`);
+  
+  // Close existing connection
+  clearTimeout(reconnectTimer);
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  
+  // Update URL and connect
+  wsUrl = newWsUrl;
+  connect();
+}
+
 /**
  * Create a new session as host
  * @param {Object} options
  * @param {string} options.worldUrl - World URL
  * @param {string} options.foundryUrl - Foundry streaming URL (optional)
+ * @param {string} options.wsUrl - Custom WebSocket server URL (optional)
  * @param {string} options.name - Host display name
  * @param {number} options.color - Host color
  * @param {number} options.maxViewers - Max viewers (default 8)
  */
-export function createSession({ worldUrl: world, foundryUrl: foundry, name, color, maxViewers: max }) {
+export function createSession({ worldUrl: world, foundryUrl: foundry, wsUrl: customWsUrl, name, color, maxViewers: max }) {
+  // If custom WS URL provided, reconnect first
+  if (customWsUrl && customWsUrl !== wsUrl) {
+    console.log(`[SessionManager] Custom WS URL provided, reconnecting to: ${customWsUrl}`);
+    pendingCreateSession = { world, foundry, name, color, max };
+    reconnect(customWsUrl);
+    return true; // Will create session after reconnect
+  }
+  
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     console.error('[SessionManager] Not connected');
     return false;

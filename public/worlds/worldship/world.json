@@ -1,7 +1,12 @@
 {
   "name": "World Ship",
+  "description": "A world ship in space.",
   "splatUrl": "/worldship/splats/worldship-lod-0.spz",
   "collisionUrl": "/worldship/worldship2.glb",
+  "thumbnail": "/worldship/thumbnail.png",
+  "bgAudioUrl": "/worldship/start-bg.mp3",
+  "position": [0.72, 3.33, -3.34],
+  "rotation": [0, -1.59, 0, 0],
   "portals": [
   
   ]

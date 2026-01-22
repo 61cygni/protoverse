@@ -73,7 +73,9 @@ ProtoVerse is a WebXR-enabled 3D world explorer built with Three.js and Gaussian
 ```json
 {
   "name": "World Name",
+  "description": "A brief description of this world (used by the world registry)",
   "splatUrl": "/worldname/splats/world-lod-0.spz",
+  "splatRotation": [qx, qy, qz, qw],
   "collisionUrl": "/worldname/collision.glb",
   "bgAudioUrl": "/worldname/ambient.mp3",
   "position": [x, y, z],
@@ -85,9 +87,12 @@ ProtoVerse is a WebXR-enabled 3D world explorer built with Three.js and Gaussian
 }
 ```
 
+- **name**: Display name for the world
+- **description**: Brief description (used by world registry)
 - **splatUrl**: Gaussian splat file (.spz format)
+- **splatRotation**: Quaternion [x,y,z,w] to rotate the splat (e.g., flip upside-down captures)
 - **collisionUrl**: GLB mesh for physics collisions
-- **position/rotation**: Camera starting position in this world
+- **position/rotation**: Camera starting position and rotation in this world
 - **foundryDisplays**: Video streaming screens (see Foundry section)
 - **waypointGraph**: NPC navigation paths
 

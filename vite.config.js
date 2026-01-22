@@ -54,7 +54,7 @@ function copyPublicExcludingWorlds() {
   };
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   resolve: {
     alias: {
       // Use local spark build from lib directory (included in deployment)
@@ -79,6 +79,8 @@ export default defineConfig(({ command }) => ({
     // Inject build timestamps
     __PROTOVERSE_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __SPARK_BUILD_TIME__: JSON.stringify(getSparkBuildTime()),
+    // Inject build mode for preset selection
+    __PROTOVERSE_MODE__: JSON.stringify(mode),
   },
 }));
 

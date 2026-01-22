@@ -31,6 +31,7 @@ import { initSpatialAudio, loadWorldAudioSources, unloadWorldAudioSources } from
 import * as SessionManager from "./multiplayer/session-manager.js";
 import { initMultiplayerPanel } from "./multiplayer/multiplayer-panel.js";
 import { initHostControls, updateWorldInfo } from "./multiplayer/host-controls.js";
+import { initSessionBrowserPanel } from "./multiplayer/session-browser-panel.js";
 import { initCharacterSync, setWorldUrl as setCharacterSyncWorld, updateCharacterSync, setCharacterSyncVRMode } from "./multiplayer/character-sync.js";
 
 // Import Foundry functions for viewer sync
@@ -341,6 +342,39 @@ if (config.multiplayer.enabled || urlParams.get('ws')) {
         foundryUrl: null, // Will be set when Foundry connects
     });
 
+    // Initialize session browser panel (shows list of active sessions to join)
+    if (config.features.showSessionBrowser) {
+        const convexHttpUrl = config.multiplayer?.convexUrl || import.meta.env.VITE_CONVEX_HTTP_URL;
+        if (convexHttpUrl) {
+            initSessionBrowserPanel({
+                convexUrl: convexHttpUrl,
+                onJoin: async ({ code, wsUrl, foundryUrl }) => {
+                    console.log(`[Main] Joining session from browser: ${code}`);
+                    
+                    // Set foundry override if provided
+                    if (foundryUrl) {
+                        window.FOUNDRY_URL_OVERRIDE = foundryUrl;
+                    }
+                    
+                    // Reconnect to the session's WS server if different
+                    if (wsUrl) {
+                        SessionManager.reconnect(wsUrl);
+                    }
+                    
+                    // Join the session
+                    const savedName = localStorage.getItem('protoverse-name') || 'Viewer';
+                    SessionManager.joinSession({
+                        sessionCode: code,
+                        name: savedName,
+                        color: Math.floor(Math.random() * 360),
+                    });
+                },
+            });
+        } else {
+            console.warn('[Main] Session browser disabled: no Convex HTTP URL configured');
+        }
+    }
+
     // Set world URL for character sync
     setCharacterSyncWorld(rootworld);
 
@@ -388,7 +422,8 @@ if (config.multiplayer.enabled || urlParams.get('ws')) {
 }
 
 // Create audio toggle button (in HUD)
-createAudioToggleButton(handleAudioToggle);
+// Pass initial state from config (default to muted for browser autoplay policies)
+createAudioToggleButton(handleAudioToggle, config.audio?.enabledByDefault ?? false);
 
 // Create collision mesh toggle button (in HUD, below audio toggle)
 // Also controls debug sphere visibility
@@ -399,6 +434,8 @@ createCollisionMeshToggleButton((visible) => {
 });
 
 // Create movement mode toggle button (Thrust vs Gravity Boots)
+// Pass initial mode from config
+const initialMovementMode = config.physics?.movementMode || 'gravityBoots';
 createMovementModeToggleButton((mode) => {
     console.log("Movement mode:", mode);
     setMovementMode(mode);
@@ -408,21 +445,23 @@ createMovementModeToggleButton((mode) => {
     if (controls && controls.fpsMovement) {
         controls.fpsMovement.enable = false;
     }
-});
+}, initialMovementMode);
 
 // Create ghost mode toggle button (pass through walls)
+// Pass initial state from config
+const initialGhostMode = config.physics?.ghostMode ?? true;
 createGhostModeToggleButton((enabled) => {
     console.log("Ghost mode:", enabled);
     setGhostMode(enabled);
-});
+}, initialGhostMode);
 
-// Enable ghost mode by default (pass through walls on startup)
-setGhostMode(true);
+// Set initial ghost mode state
+setGhostMode(initialGhostMode);
 
-// Enable physics by default if configured (must be after controls are set up)
-if (config.debug.physicsEnabled) {
+// Enable physics if configured (must be after controls are set up)
+if (config.physics?.enabled ?? config.debug.physicsEnabled) {
     setPhysicsEnabled(true);
-    setMovementMode('gravityBoots'); // Default to FPS walking
+    setMovementMode(config.physics?.movementMode || 'gravityBoots');
     if (controls && controls.fpsMovement) {
         controls.fpsMovement.enable = false;
     }

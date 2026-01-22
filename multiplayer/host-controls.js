@@ -395,6 +395,14 @@ function createControls() {
           <input type="text" class="hc-input" id="hc-name-input" placeholder="Enter your name...">
         </div>
         
+        <div class="hc-input-group">
+          <label class="hc-label">Movie URL (optional)</label>
+          <input type="text" class="hc-input" id="hc-movie-url-input" placeholder="e.g., protoverse-holygrail">
+          <div style="color: #666; font-size: 10px; margin-top: 4px;">
+            Enter app name (e.g., protoverse-holygrail) or full wss:// URL
+          </div>
+        </div>
+        
         <button class="hc-btn hc-btn-primary" id="hc-create-btn">
           Create Session
         </button>
@@ -516,6 +524,7 @@ function createControls() {
   // Disable keyboard controls when inputs are focused (prevents WASM keys from interfering)
   const inputs = [
     document.getElementById('hc-name-input'),
+    document.getElementById('hc-movie-url-input'),
     document.getElementById('hc-join-code-input')
   ];
   
@@ -562,6 +571,10 @@ function attachEventListeners() {
   }));
 }
 
+// Track active custom URLs for share URL generation
+let activeWsUrl = null;
+let activeFoundryUrl = null;
+
 /**
  * Create a new session
  */
@@ -571,9 +584,46 @@ function createSession() {
   nameInput.value = name;
   localStorage.setItem('protoverse-name', name);
   
+  // Check for custom movie URL
+  const movieUrlInput = document.getElementById('hc-movie-url-input');
+  let movieUrl = movieUrlInput?.value.trim() || '';
+  
+  // Parse movie URL - support shorthand like "protoverse-bigtrouble"
+  if (movieUrl) {
+    if (!movieUrl.includes('://') && !movieUrl.includes('.')) {
+      // Just app name like "protoverse-holygrail"
+      movieUrl = `wss://${movieUrl}.fly.dev`;
+    } else if (!movieUrl.includes('://')) {
+      // Domain without protocol
+      movieUrl = `wss://${movieUrl}`;
+    }
+  }
+  
+  // Derive foundry URL from movie URL (WS on :8765, Foundry on /ws)
+  let foundryUrl = currentFoundryUrl;
+  let wsUrl = null;
+  
+  if (movieUrl) {
+    // Parse the base URL and derive both endpoints
+    const baseUrl = movieUrl.replace(/:\d+$/, '').replace(/\/ws$/, '');
+    wsUrl = `${baseUrl}:8765`;
+    foundryUrl = `${baseUrl}/ws`;
+    console.log(`[HostControls] Using custom movie: ws=${wsUrl}, foundry=${foundryUrl}`);
+  }
+  
+  // Store active URLs for share URL generation
+  activeWsUrl = wsUrl;
+  activeFoundryUrl = foundryUrl;
+  
+  // Set the Foundry URL override so Foundry connects to the right server
+  if (foundryUrl && movieUrl) {
+    window.FOUNDRY_URL_OVERRIDE = foundryUrl;
+  }
+  
   SessionManager.createSession({
     worldUrl: currentWorldUrl,
-    foundryUrl: currentFoundryUrl,
+    foundryUrl: foundryUrl,
+    wsUrl: wsUrl, // Pass custom WS URL if using custom movie
     name,
     color: getRandomColor(),
     maxViewers: 8,
@@ -674,14 +724,21 @@ function showHostingPanel(code) {
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
   const isLanIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && !isLocalhost;
   
-  // If we're on a LAN IP, add ws/foundry params pointing to the same IP
-  if (isLanIp) {
-    if (!shareUrl.searchParams.has('ws')) {
-      shareUrl.searchParams.set('ws', `ws://${hostname}:8765`);
-    }
-    if (!shareUrl.searchParams.has('foundry')) {
-      shareUrl.searchParams.set('foundry', `ws://${hostname}:23646/ws`);
-    }
+  // If custom movie URLs were used, include them in share URL
+  if (activeWsUrl) {
+    shareUrl.searchParams.set('ws', activeWsUrl);
+    console.log(`[HostControls] Share URL using custom ws: ${activeWsUrl}`);
+  } else if (isLanIp && !shareUrl.searchParams.has('ws')) {
+    // If we're on a LAN IP, add ws/foundry params pointing to the same IP
+    shareUrl.searchParams.set('ws', `ws://${hostname}:8765`);
+  }
+  
+  if (activeFoundryUrl && activeWsUrl) {
+    // Only add foundry param if we're using a custom movie (activeWsUrl is set)
+    shareUrl.searchParams.set('foundry', activeFoundryUrl);
+    console.log(`[HostControls] Share URL using custom foundry: ${activeFoundryUrl}`);
+  } else if (isLanIp && !shareUrl.searchParams.has('foundry')) {
+    shareUrl.searchParams.set('foundry', `ws://${hostname}:23646/ws`);
   }
   // For localhost or Netlify+Fly.io, params are passed in URL or auto-detected
   

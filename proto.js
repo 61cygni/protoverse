@@ -288,9 +288,23 @@ export class ProtoVerse {
                 const splatUrl = worldData.splatUrl.startsWith('http') 
                     ? worldData.splatUrl 
                     : this._resolveUrl(worldData.splatUrl);
-                const mesh = await this.protoScene.loadSplatandSetPosition(splatUrl, [0, 0, 0], worldno);
-                state.mesh = mesh;
-                console.log("  Mesh position:", mesh.position.toArray());
+                // Get splatRotation from world.json (default to identity if not specified)
+                // Note: "rotation" is for camera starting rotation, "splatRotation" is for the splat mesh
+                const splatRotation = worldData.splatRotation || [0, 0, 0, 1];
+                try {
+                    const mesh = await this.protoScene.loadSplatandSetPosition(splatUrl, [0, 0, 0], worldno, splatRotation);
+                    state.mesh = mesh;
+                    console.log("  Mesh position:", mesh.position.toArray());
+                    if (worldData.splatRotation) {
+                        console.log("  Mesh splatRotation:", mesh.quaternion.toArray());
+                    }
+                } catch (error) {
+                    console.error(`[Proto] Failed to load splat for world: ${worldUrl}`);
+                    console.error(`[Proto]   splatUrl: ${splatUrl}`);
+                    console.error(`[Proto]   Error: ${error.message}`);
+                    // Don't throw - allow the world to exist without a mesh (for debugging)
+                    // The scene will be empty but other functionality may still work
+                }
             }
             
             // Load collision mesh for current root, or ALL worlds if waitForFullLoad is true

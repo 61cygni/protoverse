@@ -87,30 +87,55 @@ export class ProtoScene {
      * @param {string} url - URL to the splat file
      * @param {Array|THREE.Vector3} position - Position [x, y, z] or Vector3
      * @param {number} world - World number (0 for root world)
+     * @param {Array} rotation - Rotation quaternion [x, y, z, w] (default: identity)
      * @returns {Promise<SplatMesh>} The loaded mesh
      */
-    async loadSplatandSetPosition(url, position = [0, 0, 0], world = 0) {
+    async loadSplatandSetPosition(url, position = [0, 0, 0], world = 0, rotation = [0, 0, 0, 1]) {
         console.log("Loading", url);
 
         const absoluteURL = new URL(url, window.location.href).href;
 
-        const mesh = new SplatMesh({ url: absoluteURL, paged: true });
-        await mesh.initialized;
-
-        if (Array.isArray(position)) {
-            mesh.position.fromArray(position);
-        } else {
-            mesh.position.copy(position);
+        // Pre-check if the URL is accessible (catches 404s early with clear error)
+        try {
+            const headResponse = await fetch(absoluteURL, { method: 'HEAD' });
+            if (!headResponse.ok) {
+                console.error(`[Scene] Failed to load splat: ${absoluteURL}`);
+                console.error(`[Scene]   HTTP ${headResponse.status}: ${headResponse.statusText}`);
+                console.error(`[Scene]   Check that splatUrl in world.json is correct`);
+                throw new Error(`Splat file not found: ${absoluteURL} (HTTP ${headResponse.status})`);
+            }
+        } catch (fetchError) {
+            if (fetchError.message.includes('Splat file not found')) {
+                throw fetchError; // Re-throw our custom error
+            }
+            // Network error or CORS - log but continue (SplatMesh might handle it differently)
+            console.warn(`[Scene] Could not pre-check splat URL (may still load): ${absoluteURL}`, fetchError.message);
         }
-        mesh.quaternion.fromArray([0, 0, 0, 1]);
-        if (world !== 0) {
-            const universePos = worldToUniverse(mesh.position, world);
-            mesh.position.copy(universePos);
-        }
 
-        this.scene.add(mesh);
-        console.log("Loaded", url);
-        return mesh;
+        try {
+            const mesh = new SplatMesh({ url: absoluteURL, paged: true });
+            await mesh.initialized;
+
+            if (Array.isArray(position)) {
+                mesh.position.fromArray(position);
+            } else {
+                mesh.position.copy(position);
+            }
+            mesh.quaternion.fromArray(rotation);
+            if (world !== 0) {
+                const universePos = worldToUniverse(mesh.position, world);
+                mesh.position.copy(universePos);
+            }
+
+            this.scene.add(mesh);
+            console.log("Loaded", url);
+            return mesh;
+        } catch (error) {
+            console.error(`[Scene] Failed to initialize splat mesh: ${absoluteURL}`);
+            console.error(`[Scene]   Error: ${error.message}`);
+            console.error(`[Scene]   Check that splatUrl in world.json points to a valid .spz file`);
+            throw error;
+        }
     }
 
     /**

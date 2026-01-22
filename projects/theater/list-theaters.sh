@@ -124,6 +124,4 @@ else
     
     echo -e "${CYAN}Total: ${count} theater(s)${NC}"
     echo ""
-    echo -e "${DIM}Lobby: ${PROTOVERSE_URL}/lobby/${NC}"
-    echo ""
 fi

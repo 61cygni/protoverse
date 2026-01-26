@@ -20,7 +20,8 @@
     "dev:worldship": "vite --mode worldship",
     "build:worldship": "VITE_PRESET=worldship vite build --mode worldship",
     "dev:sunken": "vite --mode sunken",
-    "build:sunken": "vite build --mode sunken"
+    "build:sunken": "vite build --mode sunken",
+    "build:splat2mesh": "node scripts/build-splat2mesh.js"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

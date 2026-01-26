@@ -175,23 +175,6 @@
       color: #6a8aca;
     }
 
-    /* Hole list */
-    .hole-list {
-      max-height: 140px;
-      overflow-y: auto;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #3a3a5a;
-    }
-    .hole-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: #888;
-      margin-bottom: 6px;
-    }
   </style>
 </head>
 <body>
@@ -207,18 +190,6 @@
         <div class="stats-row"><span class="label">Original Triangles:</span> <span class="value" id="stat-orig-tris">-</span></div>
         <div class="stats-row"><span class="label">File Size:</span> <span class="value" id="stat-file-size">-</span></div>
       </div>
-    </div>
-    
-    <div class="toolbar-group">
-      <h3>2. Fill Holes</h3>
-      <button class="btn" id="detect-holes-btn" onclick="detectHoles()" disabled>Detect Holes</button>
-      <div class="prop-row">
-        <label>Auto-Fill Max Area <span class="value" id="hole-area-value">0.50</span></label>
-        <input type="range" id="hole-area-slider" min="0.01" max="10" step="0.01" value="0.50" oninput="updateHoleArea()">
-      </div>
-      <button class="btn primary" id="auto-fill-btn" onclick="autoFillHoles()" disabled>Auto Fill Small Holes</button>
-      <div class="stats-row"><span class="label">Holes Detected:</span> <span class="value" id="hole-count">-</span></div>
-      <div class="hole-list" id="hole-list"></div>
     </div>
     
     <div class="toolbar-group">
@@ -415,8 +386,6 @@
     let originalTriCount = 0;
     let originalVertCount = 0;
     let fileSize = 0;
-    let holeLoops = [];
-    let holeAreaThreshold = 0.5;
     let patchMode = false;
     let patchSize = 0.5;
     let patchDistance = 1.0;
@@ -551,19 +520,24 @@
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
+    function getPatchTargetMesh() {
+      return simplifiedMesh || null;
+    }
+
     function updatePatchPlane() {
       raycaster.setFromCamera(mouse, camera);
       
       // If snap-to-surface is enabled, try to hit the mesh
-      if (snapToSurface && originalMesh) {
+      const targetMesh = getPatchTargetMesh();
+      if (snapToSurface && targetMesh) {
         // Temporarily make mesh visible for raycasting (raycast ignores invisible objects)
-        const wasVisible = originalMesh.visible;
-        originalMesh.visible = true;
+        const wasVisible = targetMesh.visible;
+        targetMesh.visible = true;
         
-        const intersects = raycaster.intersectObject(originalMesh, false);
+        const intersects = raycaster.intersectObject(targetMesh, false);
         
         // Restore visibility
-        originalMesh.visible = wasVisible || document.getElementById('show-original').checked;
+        targetMesh.visible = wasVisible || document.getElementById('show-simplified').checked;
         
         if (intersects.length > 0) {
           const hit = intersects[0];
@@ -576,7 +550,7 @@
           // Optionally align to surface normal or face camera
           if (alignToNormal && hit.face) {
             // Align patch to surface normal
-            const normal = hit.face.normal.clone().transformDirection(originalMesh.matrixWorld);
+            const normal = hit.face.normal.clone().transformDirection(targetMesh.matrixWorld);
             patchPlane.lookAt(patchPlane.position.clone().add(normal));
           } else {
             patchPlane.lookAt(camera.position);
@@ -622,7 +596,7 @@
       transparent: true,
       opacity: 0.35,
       side: THREE.DoubleSide,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false
     });
     patchPlane = new THREE.Mesh(patchGeometry, patchMaterial);
@@ -729,13 +703,6 @@
           console.warn('BVH not available, raycasting may be slow');
         }
 
-        // Reset hole detection UI
-        holeLoops = [];
-        document.getElementById('hole-count').textContent = '-';
-        document.getElementById('hole-list').innerHTML = '';
-        document.getElementById('detect-holes-btn').disabled = false;
-        document.getElementById('auto-fill-btn').disabled = true;
-        
         // Update stats
         originalVertCount = mergedGeometry.getAttribute('position').count;
         originalTriCount = mergedGeometry.index ? mergedGeometry.index.count / 3 : originalVertCount / 3;
@@ -861,19 +828,22 @@
       window.updatePatchSpacing();
     }, 0);
 
-    // ========== Hole Detection & Filling ==========
-    window.updateHoleArea = function() {
-      holeAreaThreshold = parseFloat(document.getElementById('hole-area-slider').value);
-      document.getElementById('hole-area-value').textContent = holeAreaThreshold.toFixed(2);
-    };
+    function updatePatchVisibility() {
+      const showSimplified = document.getElementById('show-simplified').checked;
+      patchPlane.visible = patchMode && showSimplified && !!simplifiedMesh;
+    }
 
     window.togglePatchMode = function() {
       patchMode = document.getElementById('patch-mode').checked;
-      patchPlane.visible = patchMode;
+      updatePatchVisibility();
       isPainting = false;
       lastPaintPosition = null;
       if (patchMode) {
-        setStatus('Patch mode enabled. Click/drag to paint quads (faces camera).');
+        if (!simplifiedMesh) {
+          setStatus('Patch mode enabled, but requires a simplified mesh. Run Simplify first.');
+        } else {
+          setStatus('Patch mode enabled. Click/drag to paint quads (faces camera).');
+        }
       } else {
         setStatus('Patch mode disabled.');
       }
@@ -903,351 +873,6 @@
       document.getElementById('patch-spacing-value').textContent = patchSpacing.toFixed(2);
     };
 
-    window.detectHoles = function() {
-      if (!originalMesh) return;
-      holeLoops = findHoles(originalMesh.geometry);
-      renderHoleList();
-      setStatus(`Detected ${holeLoops.length} hole(s). You can auto-fill small holes or fill manually.`);
-    };
-
-    window.autoFillHoles = function() {
-      if (!originalMesh || holeLoops.length === 0) return;
-      const threshold = holeAreaThreshold;
-      let filled = 0;
-
-      // Fill smallest holes first
-      const sorted = [...holeLoops].sort((a, b) => a.area - b.area);
-      for (const hole of sorted) {
-        if (hole.area <= threshold) {
-          if (fillHoleLoop(hole)) {
-            filled++;
-          }
-        }
-      }
-
-      if (filled > 0) {
-        holeLoops = findHoles(originalMesh.geometry);
-        renderHoleList();
-        updateOriginalStats();
-        setStatus(`Auto-filled ${filled} hole(s). Remaining: ${holeLoops.length}.`);
-      } else {
-        setStatus('No holes matched the auto-fill threshold.');
-      }
-    };
-
-    window.fillHole = function(index) {
-      if (!originalMesh || !holeLoops[index]) return;
-      const hole = holeLoops[index];
-      if (fillHoleLoop(hole)) {
-        holeLoops = findHoles(originalMesh.geometry);
-        renderHoleList();
-        updateOriginalStats();
-        setStatus(`Filled hole ${index + 1}. Remaining: ${holeLoops.length}.`);
-      }
-    };
-
-    function findHoles(geometry) {
-      const index = geometry.getIndex();
-      if (!index) return [];
-
-      const edgeCount = new Map();
-      const edgeKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
-      const addEdge = (a, b) => {
-        const key = edgeKey(a, b);
-        edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
-      };
-
-      for (let i = 0; i < index.count; i += 3) {
-        const a = index.getX(i);
-        const b = index.getX(i + 1);
-        const c = index.getX(i + 2);
-        addEdge(a, b);
-        addEdge(b, c);
-        addEdge(c, a);
-      }
-
-      // Build boundary adjacency
-      const adjacency = new Map();
-      edgeCount.forEach((count, key) => {
-        if (count === 1) {
-          const [a, b] = key.split('_').map(Number);
-          if (!adjacency.has(a)) adjacency.set(a, []);
-          if (!adjacency.has(b)) adjacency.set(b, []);
-          adjacency.get(a).push(b);
-          adjacency.get(b).push(a);
-        }
-      });
-
-      const loops = [];
-      const visited = new Set();
-      const markVisited = (a, b) => visited.add(edgeKey(a, b));
-      const isVisited = (a, b) => visited.has(edgeKey(a, b));
-
-      adjacency.forEach((neighbors, start) => {
-        for (const next of neighbors) {
-          if (isVisited(start, next)) continue;
-
-          const loop = [start, next];
-          markVisited(start, next);
-          let prev = start;
-          let current = next;
-          let safety = 0;
-
-          while (safety++ < 10000) {
-            const nbrs = adjacency.get(current) || [];
-            let candidate = null;
-
-            for (const n of nbrs) {
-              if (n === prev) continue;
-              if (!isVisited(current, n)) {
-                candidate = n;
-                break;
-              }
-            }
-
-            if (candidate === null && nbrs.includes(start)) {
-              candidate = start;
-            }
-
-            if (candidate === null) break;
-            if (candidate === start) {
-              markVisited(current, candidate);
-              break;
-            }
-
-            loop.push(candidate);
-            markVisited(current, candidate);
-            prev = current;
-            current = candidate;
-          }
-
-          if (loop.length >= 3) {
-            loops.push(computeLoopMetrics(loop, geometry.getAttribute('position')));
-          }
-        }
-      });
-
-      return loops;
-    }
-
-    function computeLoopMetrics(loop, positions) {
-      const points = loop.map((i) => new THREE.Vector3(
-        positions.getX(i),
-        positions.getY(i),
-        positions.getZ(i)
-      ));
-
-      // Newell's method for normal and area
-      const normal = new THREE.Vector3();
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        const q = points[(i + 1) % points.length];
-        normal.x += (p.y - q.y) * (p.z + q.z);
-        normal.y += (p.z - q.z) * (p.x + q.x);
-        normal.z += (p.x - q.x) * (p.y + q.y);
-      }
-
-      const area = 0.5 * normal.length();
-      const n = normal.lengthSq() > 0 ? normal.normalize() : new THREE.Vector3(0, 1, 0);
-
-      let perimeter = 0;
-      for (let i = 0; i < points.length; i++) {
-        perimeter += points[i].distanceTo(points[(i + 1) % points.length]);
-      }
-
-      const centroid = new THREE.Vector3();
-      points.forEach((p) => centroid.add(p));
-      centroid.multiplyScalar(1 / points.length);
-
-      return {
-        vertices: loop,
-        area,
-        perimeter,
-        normal: n,
-        centroid,
-        pointCount: points.length
-      };
-    }
-
-    function triangulateLoop(loopData, geometry) {
-      const positions = geometry.getAttribute('position');
-      const points3D = loopData.vertices.map((i) => new THREE.Vector3(
-        positions.getX(i),
-        positions.getY(i),
-        positions.getZ(i)
-      ));
-
-      const n = loopData.normal.clone().normalize();
-      let u = new THREE.Vector3(1, 0, 0);
-      if (Math.abs(n.dot(u)) > 0.9) u.set(0, 1, 0);
-      u = new THREE.Vector3().crossVectors(n, u).normalize();
-      const v = new THREE.Vector3().crossVectors(n, u).normalize();
-
-      const points2D = points3D.map((p) => ({
-        x: p.dot(u),
-        y: p.dot(v)
-      }));
-
-      const triIndices = earClipPolygon(points2D);
-      if (!triIndices) return null;
-
-      const result = [];
-      for (const tri of triIndices) {
-        result.push(
-          loopData.vertices[tri[0]],
-          loopData.vertices[tri[1]],
-          loopData.vertices[tri[2]]
-        );
-      }
-      return result;
-    }
-
-    function earClipPolygon(points) {
-      const n = points.length;
-      if (n < 3) return null;
-
-      const area = polygonArea2D(points);
-      if (Math.abs(area) < 1e-8) return null;
-      const isCCW = area > 0;
-
-      const indices = Array.from({ length: n }, (_, i) => i);
-      const triangles = [];
-
-      let safety = 0;
-      while (indices.length > 3 && safety++ < 10000) {
-        let earFound = false;
-
-        for (let i = 0; i < indices.length; i++) {
-          const i0 = indices[(i - 1 + indices.length) % indices.length];
-          const i1 = indices[i];
-          const i2 = indices[(i + 1) % indices.length];
-
-          if (!isConvex(points[i0], points[i1], points[i2], isCCW)) continue;
-
-          let containsPoint = false;
-          for (let j = 0; j < indices.length; j++) {
-            const ij = indices[j];
-            if (ij === i0 || ij === i1 || ij === i2) continue;
-            if (pointInTriangle(points[ij], points[i0], points[i1], points[i2])) {
-              containsPoint = true;
-              break;
-            }
-          }
-          if (containsPoint) continue;
-
-          if (isCCW) {
-            triangles.push([i0, i1, i2]);
-          } else {
-            triangles.push([i0, i2, i1]);
-          }
-
-          indices.splice(i, 1);
-          earFound = true;
-          break;
-        }
-
-        if (!earFound) return null;
-      }
-
-      if (indices.length === 3) {
-        if (isCCW) {
-          triangles.push([indices[0], indices[1], indices[2]]);
-        } else {
-          triangles.push([indices[0], indices[2], indices[1]]);
-        }
-      }
-
-      return triangles;
-    }
-
-    function polygonArea2D(points) {
-      let area = 0;
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        const q = points[(i + 1) % points.length];
-        area += p.x * q.y - q.x * p.y;
-      }
-      return area * 0.5;
-    }
-
-    function isConvex(a, b, c, isCCW) {
-      const cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-      return isCCW ? cross > 1e-8 : cross < -1e-8;
-    }
-
-    function pointInTriangle(p, a, b, c) {
-      const v0x = c.x - a.x;
-      const v0y = c.y - a.y;
-      const v1x = b.x - a.x;
-      const v1y = b.y - a.y;
-      const v2x = p.x - a.x;
-      const v2y = p.y - a.y;
-
-      const dot00 = v0x * v0x + v0y * v0y;
-      const dot01 = v0x * v1x + v0y * v1y;
-      const dot02 = v0x * v2x + v0y * v2y;
-      const dot11 = v1x * v1x + v1y * v1y;
-      const dot12 = v1x * v2x + v1y * v2y;
-
-      const invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
-      const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-      const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-      return u >= 0 && v >= 0 && (u + v) <= 1;
-    }
-
-    function fillHoleLoop(loopData) {
-      const geometry = originalMesh.geometry;
-      const triangles = triangulateLoop(loopData, geometry);
-      if (!triangles || triangles.length === 0) {
-        setStatus('Failed to triangulate hole. Try manual fill or adjust geometry.');
-        return false;
-      }
-
-      const index = geometry.getIndex();
-      const oldArray = index.array;
-      const newArray = new oldArray.constructor(oldArray.length + triangles.length);
-      newArray.set(oldArray);
-      newArray.set(triangles, oldArray.length);
-      geometry.setIndex(newArray);
-      geometry.computeVertexNormals();
-      geometry.computeBoundingSphere();
-
-      return true;
-    }
-
-    function renderHoleList() {
-      const list = document.getElementById('hole-list');
-      list.innerHTML = '';
-      document.getElementById('hole-count').textContent = holeLoops.length.toString();
-      document.getElementById('auto-fill-btn').disabled = holeLoops.length === 0;
-
-      if (holeLoops.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'stats-row';
-        empty.textContent = 'No boundary holes detected.';
-        list.appendChild(empty);
-        return;
-      }
-
-      holeLoops.forEach((hole, idx) => {
-        const item = document.createElement('div');
-        item.className = 'hole-item';
-
-        const label = document.createElement('div');
-        label.textContent = `Hole ${idx + 1} • area ${hole.area.toFixed(2)} • edges ${hole.pointCount}`;
-
-        const btn = document.createElement('button');
-        btn.className = 'btn small';
-        btn.textContent = 'Fill';
-        btn.onclick = () => window.fillHole(idx);
-
-        item.appendChild(label);
-        item.appendChild(btn);
-        list.appendChild(item);
-      });
-    }
-
     function updateOriginalStats() {
       if (!originalMesh) return;
       const geometry = originalMesh.geometry;
@@ -1259,10 +884,16 @@
     }
 
     function placePatch() {
-      if (!originalMesh || !patchPlane.visible) return;
+      const targetMesh = getPatchTargetMesh();
+      if (!targetMesh || !patchPlane.visible) {
+        if (!targetMesh) {
+          setStatus('Patch tool requires a simplified mesh. Run Simplify first.');
+        }
+        return;
+      }
 
       try {
-        const oldGeometry = originalMesh.geometry;
+        const oldGeometry = targetMesh.geometry;
         const posAttr = oldGeometry.getAttribute('position');
         if (!posAttr) return;
 
@@ -1324,7 +955,7 @@
         newGeometry.computeBoundingSphere();
 
         // Swap geometry
-        originalMesh.geometry = newGeometry;
+        targetMesh.geometry = newGeometry;
         if (oldGeometry.disposeBoundsTree) oldGeometry.disposeBoundsTree();
         oldGeometry.dispose();
         
@@ -1532,6 +1163,7 @@
         simplifiedMesh = new THREE.Mesh(simplifiedGeometry, simplifiedMaterial);
         simplifiedMesh.visible = document.getElementById('show-simplified').checked;
         scene.add(simplifiedMesh);
+        updatePatchVisibility();
         
         // Update stats
         const newTriCount = newIndexCount / 3;
@@ -1569,6 +1201,9 @@
     window.toggleSimplified = function() {
       if (simplifiedMesh) {
         simplifiedMesh.visible = document.getElementById('show-simplified').checked;
+      }
+      if (patchPlane) {
+        updatePatchVisibility();
       }
     };
     

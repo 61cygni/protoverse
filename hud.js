@@ -42,6 +42,14 @@ hud.style.cssText = `
 `;
 document.body.appendChild(hud);
 
+/**
+ * Show/hide the bottom-left HUD panel
+ * @param {boolean} visible
+ */
+export function setHudPanelVisible(visible) {
+    hud.style.display = visible ? "block" : "none";
+}
+
 // ========== Audio Toggle Button ==========
 let audioEnabled = false; // Default to audio off (user must click to enable - required for VR)
 let audioToggleCallback = null; // Callback function when audio is toggled
@@ -220,7 +228,9 @@ function updateCollisionMeshToggleButton(button = null) {
     
     // Use Unicode symbols: 🔲 (collision on) or ⬜ (collision off)
     btn.textContent = collisionMeshVisible ? "🔲" : "⬜";
-    btn.title = collisionMeshVisible ? "Collision mesh: VISIBLE (click to hide)" : "Collision mesh: HIDDEN (click to show)";
+    btn.title = collisionMeshVisible
+        ? "Wireframe collision mesh: VISIBLE (click to hide)"
+        : "Wireframe collision mesh: HIDDEN (click to show)";
 }
 
 /**
@@ -323,10 +333,10 @@ function updateMovementModeToggleButton(button = null) {
     
     if (movementMode === 'gravityBoots') {
         btn.textContent = "🥾";
-        btn.title = "Gravity Boots (click for Thrust)";
+        btn.title = "Walk mode (click for thrusters)";
     } else {
         btn.textContent = "🚀";
-        btn.title = "Thrust Mode (click for Gravity Boots)";
+        btn.title = "Thrusters (click for walk mode)";
     }
 }
 
@@ -428,10 +438,10 @@ function updateGhostModeToggleButton(button = null) {
     
     if (ghostModeEnabled) {
         btn.textContent = "👻";
-        btn.title = "Ghost Mode ON (click to disable)";
+        btn.title = "Physics: OFF (ghost/no collisions) - click to enable";
     } else {
         btn.textContent = "🧱";
-        btn.title = "Ghost Mode OFF (click to enable)";
+        btn.title = "Physics: ON (collisions enabled) - click to disable";
     }
 }
 
@@ -558,7 +568,9 @@ function updateFoundryToggleButton(button = null) {
     // 📺 = screen share icon
     btn.textContent = "📺";
     btn.style.borderColor = foundryConnected ? "rgba(0, 255, 0, 0.8)" : "rgba(0, 255, 255, 0.5)";
-    btn.title = foundryConnected ? "Foundry: CONNECTED (click to disconnect)" : "Foundry: DISCONNECTED (click to connect)";
+    btn.title = foundryConnected
+        ? "Start movie: ON (click to stop)"
+        : "Start movie: OFF (click to start)";
 }
 
 /**
@@ -630,7 +642,7 @@ function updateCinemaModeButton(button = null) {
     // 🎬 = cinema mode
     btn.textContent = "🎬";
     btn.style.borderColor = cinemaModeActive ? "rgba(128, 0, 255, 0.8)" : "rgba(128, 0, 255, 0.5)";
-    btn.title = cinemaModeActive ? "Cinema Mode: ON (click to disable)" : "Cinema Mode: OFF (click to enable)";
+    btn.title = cinemaModeActive ? "Cinema mode: ON (click to disable)" : "Cinema mode: OFF (click to enable)";
 }
 
 /**
@@ -738,6 +750,92 @@ export function setPlaybackButtonVisible(visible) {
     if (btn) {
         btn.style.display = visible ? "flex" : "none";
     }
+}
+
+// ========== Fullscreen Toggle Button ==========
+let fullscreenToggleCallback = null;
+
+export function createFullscreenToggleButton(onToggle = null) {
+    fullscreenToggleCallback = onToggle;
+
+    const button = document.createElement("button");
+    button.id = "fullscreen-toggle";
+    button.style.cssText = `
+        position: fixed;
+        top: 360px;
+        left: 10px;
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.7);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-radius: 50%;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        z-index: 1001;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    `;
+    button.addEventListener("click", async () => {
+        try {
+            if (isFullscreenActive()) {
+                await exitFullscreen();
+            } else {
+                await enterFullscreen();
+            }
+            if (fullscreenToggleCallback) {
+                fullscreenToggleCallback(isFullscreenActive());
+            }
+        } catch (error) {
+            console.warn("Fullscreen toggle failed:", error);
+        }
+    });
+    button.addEventListener("mouseenter", () => {
+        button.style.background = "rgba(0, 0, 0, 0.9)";
+        button.style.borderColor = "rgba(255, 255, 255, 0.8)";
+    });
+    button.addEventListener("mouseleave", () => {
+        button.style.background = "rgba(0, 0, 0, 0.7)";
+        button.style.borderColor = "rgba(255, 255, 255, 0.5)";
+    });
+
+    updateFullscreenToggleButton(button);
+    document.body.appendChild(button);
+
+    document.addEventListener("fullscreenchange", () => {
+        updateFullscreenToggleButton();
+    });
+}
+
+function isFullscreenActive() {
+    return !!document.fullscreenElement;
+}
+
+async function enterFullscreen() {
+    const element = document.documentElement;
+    if (element.requestFullscreen) {
+        await element.requestFullscreen();
+    } else if (element.webkitRequestFullscreen) {
+        await element.webkitRequestFullscreen();
+    }
+}
+
+async function exitFullscreen() {
+    if (document.exitFullscreen) {
+        await document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+    }
+}
+
+function updateFullscreenToggleButton(button = null) {
+    const btn = button || document.getElementById("fullscreen-toggle");
+    if (!btn) return;
+    const active = isFullscreenActive();
+    btn.textContent = active ? "🗗" : "⛶";
+    btn.title = active ? "Fullscreen: Exit" : "Fullscreen: Enter";
 }
 
 const worldPos = new THREE.Vector3();

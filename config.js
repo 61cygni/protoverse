@@ -179,6 +179,9 @@ const baseConfig = {
     debug: {
         // Show FPS counter
         showFps: true,
+
+        // Show bottom-left HUD panel (pos, wpos, rot, world)
+        showHudPanel: true,
         
         // Log world changes to console
         logWorldChanges: true,

@@ -47,7 +47,7 @@ function createPanel() {
     <style>
       #session-browser-panel {
         position: fixed;
-        top: 320px;
+        top: 360px;
         right: 20px;
         z-index: 1000;
         font-family: 'JetBrains Mono', 'SF Mono', monospace;

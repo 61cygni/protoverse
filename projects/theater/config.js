@@ -15,11 +15,18 @@ export default {
         showCinemaControls: true,  // Theater has movie displays
         showSessionBrowser: true,  // Show list of active sessions to join
     },
+     audio: {
+        enabledByDefault: true,
+    },
     multiplayer: {
         enabled: true,
     },
+    physics: {
+        ghostMode: false,
+    },
     debug: {
         showFps: false,
+        showHudPanel: false,
         logWorldChanges: false,
         logPortalCrossings: false,
     },

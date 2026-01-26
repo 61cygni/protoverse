@@ -192,15 +192,23 @@ Characters like Y-Bot use a DAG (Directed Acyclic Graph) for natural wandering:
 
 Foundry is a custom Rust server for video streaming (H.264 over WebSocket).
 
-**Server**: `~/projects/foundry/foundry-player/` - Rust application
+**Server**: `~/projects/foundry/` - Rust application
+- `foundry-player`: Stream MP4 video files (movies)
+- `foundry --window <id>`: Stream desktop windows (screen share)
+
 **Client**: `foundry-share.js` + `public/foundry-worker.js`
 
+**Display Types:**
+- `"movie"` (default): For video playback - fetches movie info, supports restart, TV-like ambient glow, AI commentary
+- `"screen"`: For live desktop streaming - no movie info, no restart, stable ambient glow, no AI commentary
+
 ```json
-// world.json
+// world.json - Movie display
 "foundryDisplays": [
   {
-    "name": "Screen Share",
-    "wsUrl": "wss://protoverse-bigtrouble.fly.dev/ws",
+    "type": "movie",
+    "name": "Theater Screen",
+    "wsUrl": "wss://protoverse-movie.fly.dev/ws",
     "position": [-13.33, 6.5, -0.06],
     "width": 3.5,
     "aspectRatio": 1.777,
@@ -212,9 +220,21 @@ Foundry is a custom Rust server for video streaming (H.264 over WebSocket).
     }
   }
 ]
+
+// world.json - Screen display
+"foundryDisplays": [
+  {
+    "type": "screen",
+    "name": "Desktop Share",
+    "wsUrl": "ws://localhost:23646/ws",
+    "position": [0, 2, -3],
+    "width": 2.0,
+    "aspectRatio": 1.777
+  }
+]
 ```
 
-The `vrCommentaryPanel` configures where Y-Bot's movie commentary appears (subtitle-style at bottom of screen).
+The `vrCommentaryPanel` configures where Y-Bot's movie commentary appears (only for movie type).
 
 ### 8. AI Chat System
 

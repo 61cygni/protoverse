@@ -29,7 +29,7 @@ import {
     appendVRChatStreaming, 
     endVRChatStreaming 
 } from "../vr/vr-chat.js";
-import { onCinemaModeChange, offCinemaModeChange, captureFoundryFrame, isCinemaModeActive, getFoundryScreenPosition, getFoundryScreenRotation, getFoundryMovieConfig, getFoundryDisplayConfig, isFoundryDisplayPaused, isFoundryConnected } from "../foundry-share.js";
+import { onCinemaModeChange, offCinemaModeChange, captureFoundryFrame, isCinemaModeActive, getFoundryScreenPosition, getFoundryScreenRotation, getFoundryMovieConfig, getFoundryDisplayConfig, getFoundryDisplayType, isFoundryDisplayPaused, isFoundryConnected } from "../foundry-share.js";
 import { showSplatCommentary, hideSplatCommentary } from "../splat-dialog-box.js";
 
 const forwardDir = new THREE.Vector3();
@@ -508,6 +508,13 @@ function startCommentaryTimer(instance, worldUrl) {
     // Check if commentary is enabled
     if (!state.commentaryEnabled) {
         console.log(`[${state.displayName}] Commentary disabled in config`);
+        return;
+    }
+    
+    // Skip commentary for screen displays (only movies get AI commentary)
+    const displayType = getFoundryDisplayType(worldUrl);
+    if (displayType === "screen") {
+        console.log(`[${state.displayName}] Commentary disabled for screen display type`);
         return;
     }
     

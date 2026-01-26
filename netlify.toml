@@ -1,3 +1,7 @@
+#[build]
+#  publish = "dist-splat2mesh"
+#  command = "npm run build:splat2mesh"
+
 [build]
   publish = "dist"
   command = "npm run build:theater"

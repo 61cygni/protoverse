@@ -1,24 +1,39 @@
 /**
  * Foundry Share Component
  * 
- * Connects to a Foundry screen streaming server and displays it in the 3D world.
+ * Connects to a Foundry streaming server and displays video in the 3D world.
  * Uses WebCodecs for efficient H.264 video decoding.
  * 
+ * Supports two display types:
+ * - "movie" (default): For foundry-player video streaming (movies, pre-recorded content)
+ * - "screen": For foundry screen/window capture (live desktop streaming)
+ * 
  * Requirements:
- * - Foundry server running (cargo run --release in foundry project)
- *   By default serves on http://localhost:3000
+ * - For movies: foundry-player running (~/projects/foundry)
+ * - For screens: foundry running with --window option (~/projects/foundry)
  * 
  * Usage in world.json:
  * "foundryDisplays": [
  *   {
- *     "name": "My Screen",
- *     "wsUrl": "ws://localhost:3000/ws",
+ *     "type": "screen",
+ *     "name": "Desktop Share",
+ *     "wsUrl": "ws://localhost:23646/ws",
  *     "position": [0, 2, -3],
  *     "rotation": [0, 0, 0, 1],
  *     "width": 2.0,
  *     "aspectRatio": 1.777
+ *   },
+ *   {
+ *     "type": "movie",
+ *     "name": "Theater Screen",
+ *     "wsUrl": "wss://protoverse-movie.fly.dev/ws",
+ *     ...
  *   }
  * ]
+ * 
+ * Type differences:
+ * - movie: Fetches movie info, supports restart, TV-like ambient glow, AI commentary
+ * - screen: No movie info, no restart (live), stable ambient glow, no AI commentary
  */
 
 import * as THREE from "three";
@@ -55,6 +70,7 @@ class FoundryDisplay {
         this.config = config;
         this.mesh = mesh;
         this.worldUrl = worldUrl;  // For identifying display in callbacks
+        this.type = config.type || "movie";  // "movie" (default) or "screen"
         this.ws = null;
         this.texture = null;
         this.isConnected = false;
@@ -83,6 +99,8 @@ class FoundryDisplay {
         this.ambientGlowLayer = null;
         this.ambientGlowLights = [];
         this._setupAmbientGlow();
+        
+        console.log(`[Foundry] Created ${this.type} display: "${config.name}"`);
     }
     
     /**
@@ -130,11 +148,16 @@ class FoundryDisplay {
         const forward = new THREE.Vector3(0, 0, 1);
         forward.applyQuaternion(tvQuat);
         
-        // Create single centered blue light
-        // Start with a dim blue, the animation will vary the color via setHSL
+        // Create single centered light
+        // Screen type: neutral white, Movie type: dim blue (TV flicker effect)
+        const isScreen = this.type === "screen";
+        const initialColor = isScreen 
+            ? new THREE.Color().setHSL(0.0, 0.0, 0.4)   // Neutral white/gray
+            : new THREE.Color().setHSL(0.6, 0.6, 0.3);  // Dim blue
+        
         const light = new SplatEditSdf({
             type: SplatEditSdfType.SPHERE,
-            color: new THREE.Color().setHSL(0.6, 0.6, 0.3),  // Dim blue
+            color: initialColor,
             radius: radius,
             opacity: 0,  // Start hidden, will show when connected
         });
@@ -147,7 +170,7 @@ class FoundryDisplay {
         
         this.ambientGlowLayer.add(light);
         const phaseOffset = Math.random() * Math.PI * 2;
-        this.ambientGlowLights.push({ light, config: { name: 'blue' }, baseOpacity: opacity, phaseOffset });
+        this.ambientGlowLights.push({ light, config: { name: isScreen ? 'white' : 'blue' }, baseOpacity: opacity, phaseOffset });
         
         // Track glow active state for animation
         this.ambientGlowActive = false;
@@ -169,36 +192,50 @@ class FoundryDisplay {
     
     /**
      * Update ambient glow animation (call each frame)
-     * Creates TV-like flickering effect using color variation (like the Spark example)
+     * Movie type: TV-like flickering effect using color variation
+     * Screen type: Stable neutral glow (desktop content is more static)
      * @param {number} time - Current time in seconds
      */
     updateAmbientGlow(time) {
         if (!this.ambientGlowActive || this.ambientGlowLights.length === 0) return;
         
-        // TV-like flicker using multiple sine waves (similar to Spark dynamic-lighting example)
-        const baseHue = 0.6;  // Blue hue (0.6 = blue in HSL)
-        const hueVariation = 0.05;  // Slight variation toward cyan/purple
+        const isScreen = this.type === "screen";
         
-        // Combine flickers for natural TV effect
-        const slowFlicker = Math.sin(time * 6) * 0.04 + 0.5;       // Slow base
-        const mediumFlicker = Math.sin(time * 13) * 0.1 + 0.1;     // Medium
-        const fastFlicker = Math.sin(time * 20) * 0.1 + 0.1;       // Fast
-        const combinedFlicker = (slowFlicker + mediumFlicker + fastFlicker) / 3;
-        
-        // Random-ish variation for saturation
-        const randomFlicker = Math.sin(time * 4) * 0.5 + 0.5;
-        
-        for (const { light, baseOpacity } of this.ambientGlowLights) {
-            // Vary hue slightly
-            const h = baseHue + combinedFlicker * hueVariation;
-            // Vary saturation
-            const s = 0.4 + randomFlicker * 0.2;
-            // Vary lightness (brightness) - this creates the flicker
-            // Keep lightness very low (0.1 - 0.25) for subtle effect
-            const l = 0.1 + combinedFlicker * 0.15;
+        if (isScreen) {
+            // Screen type: stable neutral glow with very subtle breathing
+            const breathe = Math.sin(time * 0.5) * 0.02 + 0.98;  // 96-100% brightness
             
-            light.color.setHSL(h, s, l);
-            light.opacity = baseOpacity;
+            for (const { light, baseOpacity } of this.ambientGlowLights) {
+                // Neutral white/gray with subtle warmth variation
+                light.color.setHSL(0.1, 0.05, 0.35 * breathe);
+                light.opacity = baseOpacity;
+            }
+        } else {
+            // Movie type: TV-like flicker using multiple sine waves (similar to Spark dynamic-lighting example)
+            const baseHue = 0.6;  // Blue hue (0.6 = blue in HSL)
+            const hueVariation = 0.05;  // Slight variation toward cyan/purple
+            
+            // Combine flickers for natural TV effect
+            const slowFlicker = Math.sin(time * 6) * 0.04 + 0.5;       // Slow base
+            const mediumFlicker = Math.sin(time * 13) * 0.1 + 0.1;     // Medium
+            const fastFlicker = Math.sin(time * 20) * 0.1 + 0.1;       // Fast
+            const combinedFlicker = (slowFlicker + mediumFlicker + fastFlicker) / 3;
+            
+            // Random-ish variation for saturation
+            const randomFlicker = Math.sin(time * 4) * 0.5 + 0.5;
+            
+            for (const { light, baseOpacity } of this.ambientGlowLights) {
+                // Vary hue slightly
+                const h = baseHue + combinedFlicker * hueVariation;
+                // Vary saturation
+                const s = 0.4 + randomFlicker * 0.2;
+                // Vary lightness (brightness) - this creates the flicker
+                // Keep lightness very low (0.1 - 0.25) for subtle effect
+                const l = 0.1 + combinedFlicker * 0.15;
+                
+                light.color.setHSL(h, s, l);
+                light.opacity = baseOpacity;
+            }
         }
     }
     
@@ -339,8 +376,15 @@ class FoundryDisplay {
     
     /**
      * Restart playback from the beginning - sends command to server
+     * Only applies to movie type (screen streams don't have a beginning)
      */
     restart() {
+        // Screen type doesn't support restart (live stream)
+        if (this.type === "screen") {
+            console.log(`[Foundry] "${this.config.name}" restart ignored (screen type)`);
+            return;
+        }
+        
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: "restart" }));
             console.log(`[Foundry] "${this.config.name}" restart requested`);
@@ -459,7 +503,7 @@ class FoundryDisplay {
         
         socket.onopen = () => {
             if (this.ws !== socket) return socket.close();
-            console.log(`[Foundry] "${this.config.name}" socket opened`);
+            console.log(`[Foundry] "${this.config.name}" socket opened (type: ${this.type})`);
             this._resetBackoff();
             this.isConnected = true;
             this._setupTexture();
@@ -467,8 +511,10 @@ class FoundryDisplay {
             // Enable ambient glow when connected
             this._setAmbientGlowVisible(true);
             
-            // Fetch movie info from foundry-player
-            this._fetchMovieInfo(wsUrl);
+            // Fetch movie info from foundry-player (only for movie type)
+            if (this.type === "movie") {
+                this._fetchMovieInfo(wsUrl);
+            }
             
             // Request video mode
             this._sendJson({ type: "mode", mode: "video", codec: REQUESTED_CODEC });
@@ -1495,6 +1541,28 @@ export function getFoundryDisplayConfig(worldUrl, identifier = 0) {
     }
     
     return display?.config || null;
+}
+
+/**
+ * Get the type of a Foundry display ("movie" or "screen")
+ * @param {string} worldUrl - World URL to get display from
+ * @param {number|string} identifier - Display index or name
+ * @returns {string|null} - Display type or null if not found
+ */
+export function getFoundryDisplayType(worldUrl, identifier = 0) {
+    const displays = worldFoundryDisplays.get(worldUrl);
+    if (!displays || displays.length === 0) {
+        return null;
+    }
+    
+    let display;
+    if (typeof identifier === 'number') {
+        display = displays[identifier];
+    } else {
+        display = displays.find(d => d.config.name === identifier);
+    }
+    
+    return display?.type || null;
 }
 
 /**

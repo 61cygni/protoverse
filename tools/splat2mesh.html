@@ -1130,7 +1130,6 @@
         scene.add(generatedMesh);
 
         updateMeshHelpers();
-        centerCameraOnGeneratedMesh();
         updateSceneForTab();
 
         document.getElementById('splat-stat-verts').textContent = (vertices.length / 3).toLocaleString();
@@ -1246,7 +1245,7 @@
       fileSize = 0;
       const geometry = generatedMesh.geometry.clone();
       geometry.applyMatrix4(generatedMesh.matrixWorld);
-      loadSimplifyGeometry(geometry, 'Generated mesh');
+      loadSimplifyGeometry(geometry, 'Generated mesh', { skipCenter: true });
       setActiveTab('simplify');
     };
 
@@ -1295,7 +1294,8 @@
       }
     }
 
-    function loadSimplifyGeometry(geometry, label = 'mesh') {
+    function loadSimplifyGeometry(geometry, label = 'mesh', options = {}) {
+      const { skipCenter = false } = options;
       if (originalMesh) {
         scene.remove(originalMesh);
         originalMesh.geometry.dispose();
@@ -1334,7 +1334,9 @@
 
       document.getElementById('simplify-btn').disabled = false;
       updateReductionValue();
-      centerCamera();
+      if (!skipCenter) {
+        centerCamera();
+      }
       document.getElementById('comparison-stats').style.display = 'none';
       document.getElementById('export-btn').disabled = true;
       document.getElementById('stat-reduction').textContent = '-';

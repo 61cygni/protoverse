@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { updateHUD, createAudioToggleButton, createCollisionMeshToggleButton, createMovementModeToggleButton, createGhostModeToggleButton, createFoundryToggleButton, createCinemaModeButton, createPlaybackPauseButton, initHud, getAudioEnabled, setFoundryButtonVisible, setCinemaButtonVisible, setPlaybackButtonVisible, setPlaybackPaused } from "./hud.js";
+import { updateHUD, createAudioToggleButton, createCollisionMeshToggleButton, createMovementModeToggleButton, createGhostModeToggleButton, createFoundryToggleButton, createCinemaModeButton, createPlaybackPauseButton, createFullscreenToggleButton, initHud, getAudioEnabled, setFoundryButtonVisible, setCinemaButtonVisible, setPlaybackButtonVisible, setPlaybackPaused, setHudPanelVisible } from "./hud.js";
 import { initAudio, playWorldAudio, handleAudioToggle, setCurrentWorldData, ensureAudioContext, getCurrentWorldData, setupIOSAudioUnlock } from "./audio.js";
 import { initControls, createAnimationLoop } from "./controls.js";
 import { ProtoVerse } from "./proto.js";
@@ -54,6 +54,7 @@ const resolveUrl = createUrlResolver({ urlBase: config.urls.urlBase });
 const rootworld = config.world.rootWorld;
 
 const stats = initHud();
+setHudPanelVisible(config.debug?.showHudPanel ?? true);
 initAudio(resolveUrl);
 
 // ========== Scene Setup ==========
@@ -454,6 +455,9 @@ createGhostModeToggleButton((enabled) => {
     console.log("Ghost mode:", enabled);
     setGhostMode(enabled);
 }, initialGhostMode);
+
+// Create fullscreen toggle button
+createFullscreenToggleButton();
 
 // Set initial ghost mode state
 setGhostMode(initialGhostMode);

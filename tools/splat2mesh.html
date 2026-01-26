@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Splat2Mesh</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1a2e; 
+      color: #eee;
+      overflow: hidden;
+    }
+    #canvas-container {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 0;
+    }
+    canvas { 
+      display: block; 
+      touch-action: none;
+    }
+
+    /* Toolbar */
+    #toolbar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      bottom: 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+      max-width: 320px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    #toolbar::-webkit-scrollbar { width: 6px; }
+    #toolbar::-webkit-scrollbar-track { background: rgba(30, 30, 50, 0.5); border-radius: 3px; }
+    #toolbar::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 3px; }
+
+    .tab-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .tab-btn {
+      background: #1d1d33;
+      border: 1px solid #3a3a5a;
+      color: #aaa;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: #2b2b4b;
+      color: #00d4ff;
+      border-color: #00d4ff55;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .toolbar-group {
+      background: rgba(30, 30, 50, 0.95);
+      border-radius: 8px;
+      padding: 12px;
+      border: 1px solid #3a3a5a;
+      flex-shrink: 0;
+    }
+    .toolbar-group h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+
+    .btn {
+      background: #2a2a4a;
+      border: 1px solid #4a4a6a;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+      display: block;
+      width: 100%;
+      margin-bottom: 4px;
+    }
+    .btn:hover { background: #3a3a6a; border-color: #6a6a9a; }
+    .btn:active { background: #4a4a7a; }
+    .btn.primary { background: #4a6aaa; border-color: #6a8aca; }
+    .btn.primary:hover { background: #5a7aba; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .prop-row {
+      margin-bottom: 10px;
+    }
+    .prop-row label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .prop-row input[type="range"] {
+      width: 100%;
+    }
+    .prop-row .value {
+      font-size: 11px;
+      color: #6a8aca;
+      float: right;
+    }
+
+    .stats-row {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .stats-row .label { color: #666; }
+    .stats-row .value { color: #6a8aca; }
+    .stats-row .value.good { color: #6aca6a; }
+    .stats-row .value.warning { color: #caca6a; }
+
+    /* Status bar */
+    #status {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: rgba(30, 30, 50, 0.9);
+      border-radius: 8px;
+      padding: 10px 15px;
+      font-size: 12px;
+      color: #888;
+      z-index: 100;
+    }
+    #status .hint { color: #6a8aca; }
+
+    /* Progress */
+    .progress-bar {
+      height: 4px;
+      background: #2a2a4a;
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: #4a9aff;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    /* Toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .toggle-row label { font-size: 12px; color: #888; }
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Comparison view */
+    .comparison-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #3a3a5a;
+    }
+    .comparison-stats .col {
+      text-align: center;
+    }
+    .comparison-stats .col-label {
+      font-size: 10px;
+      color: #666;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .comparison-stats .col-value {
+      font-size: 14px;
+      color: #6a8aca;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="toolbar">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="splat">Splat → Mesh</button>
+      <button class="tab-btn" data-tab="simplify">Simplify Mesh</button>
+    </div>
+
+    <div id="tab-splat" class="tab-panel active">
+      <div class="toolbar-group">
+        <h3>1. Load Splat</h3>
+        <button class="btn" onclick="document.getElementById('splat-file-input').click()">Load .spz / .ply / .splat</button>
+        <input type="file" id="splat-file-input" accept=".spz,.ply,.splat,.gz" style="display:none">
+        <div style="margin-top: 8px;">
+          <div class="stats-row"><span class="label">Splats:</span> <span class="value" id="splat-stat-splats">-</span></div>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>2. Downsample</h3>
+        <div class="prop-row">
+          <label>Opacity Cutoff <span class="value" id="splat-opacity-value">0.05</span></label>
+          <input type="range" id="splat-opacity" min="0" max="1" step="0.01" value="0.05" oninput="updateSplatOpacityThreshold()">
+        </div>
+        <div class="prop-row">
+          <label>Sample Rate <span class="value" id="splat-sample-value">10%</span></label>
+          <input type="range" id="splat-sample-rate" min="1" max="100" value="10" oninput="updateSplatSampleRate()">
+        </div>
+        <div class="stats-row"><span class="label">After opacity:</span> <span class="value" id="splat-stat-filtered">-</span></div>
+        <div class="stats-row"><span class="label">Points used:</span> <span class="value" id="splat-stat-points">-</span></div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>3. Generate Mesh</h3>
+        <div class="prop-row">
+          <label>Voxel Resolution <span class="value" id="splat-voxel-value">50</span></label>
+          <input type="range" id="splat-voxel" min="20" max="1000" value="50" oninput="updateSplatVoxelRes()">
+        </div>
+        <div class="prop-row">
+          <label>Fill Radius <span class="value" id="splat-fill-value">2.0</span></label>
+          <input type="range" id="splat-fill-radius" min="0.1" max="5" value="2" step="0.1" oninput="updateSplatFillRadius()">
+        </div>
+        <button class="btn primary" id="splat-generate-btn" onclick="generateSplatMesh()" disabled>Generate Mesh</button>
+        <div class="progress-bar"><div class="fill" id="splat-progress"></div></div>
+        <div class="stats-row" style="margin-top: 8px;"><span class="label">Vertices:</span> <span class="value" id="splat-stat-verts">-</span></div>
+        <div class="stats-row"><span class="label">Triangles:</span> <span class="value" id="splat-stat-tris">-</span></div>
+        <button class="btn" id="send-to-simplify-btn" onclick="sendToSimplify()" disabled>Send to Simplify Tab</button>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>4. Preview</h3>
+        <div class="toggle-row">
+          <input type="checkbox" id="splat-show-points" checked onchange="toggleSplatPoints()">
+          <label for="splat-show-points">Show sample points</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="splat-show-mesh" checked onchange="toggleSplatMesh()">
+          <label for="splat-show-mesh">Show mesh</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="splat-show-wireframe" onchange="toggleSplatWireframe()">
+          <label for="splat-show-wireframe">Wireframe mode</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="splat-show-edges" onchange="toggleSplatEdges()">
+          <label for="splat-show-edges">Show edges overlay</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="splat-show-vertices" onchange="toggleSplatVertices()">
+          <label for="splat-show-vertices">Show vertices</label>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>5. Export</h3>
+        <button class="btn primary" id="splat-export-btn" onclick="exportSplatGLB()" disabled>Export Generated .glb</button>
+      </div>
+    </div>
+
+    <div id="tab-simplify" class="tab-panel">
+      <div class="toolbar-group">
+        <h3>1. Load Mesh</h3>
+        <button class="btn" onclick="document.getElementById('mesh-file-input').click()">Load .glb / .gltf file</button>
+        <input type="file" id="mesh-file-input" accept=".glb,.gltf" style="display:none">
+        <div id="original-stats" style="margin-top: 8px;">
+          <div class="stats-row"><span class="label">Original Vertices:</span> <span class="value" id="stat-orig-verts">-</span></div>
+          <div class="stats-row"><span class="label">Original Triangles:</span> <span class="value" id="stat-orig-tris">-</span></div>
+          <div class="stats-row"><span class="label">File Size:</span> <span class="value" id="stat-file-size">-</span></div>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>2. Patch Tool</h3>
+        <div class="toggle-row">
+          <input type="checkbox" id="patch-mode" onchange="togglePatchMode()">
+          <label for="patch-mode">Enable Patch Mode</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="snap-to-surface" checked onchange="toggleSnapToSurface()">
+          <label for="snap-to-surface">Snap to mesh surface</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="align-to-normal" onchange="toggleAlignToNormal()">
+          <label for="align-to-normal">Align to surface normal</label>
+        </div>
+        <div class="prop-row">
+          <label>Patch Size <span class="value" id="patch-size-value">0.50</span></label>
+          <input type="range" id="patch-size" min="0.05" max="5" step="0.05" value="0.50" oninput="updatePatchSize()">
+        </div>
+        <div class="prop-row">
+          <label>Patch Distance (fallback) <span class="value" id="patch-distance-value">1.00</span></label>
+          <input type="range" id="patch-distance" min="0.1" max="10" step="0.1" value="1.00" oninput="updatePatchDistance()">
+        </div>
+        <div class="prop-row">
+          <label>Brush Spacing <span class="value" id="patch-spacing-value">0.25</span></label>
+          <input type="range" id="patch-spacing" min="0.05" max="2" step="0.05" value="0.25" oninput="updatePatchSpacing()">
+        </div>
+      <button class="btn" id="patch-undo-btn" onclick="undoPatch()" disabled>Undo Patch</button>
+        <div class="stats-row">
+          Click/drag to paint quads onto the mesh. Patches face the camera.
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>3. Simplify</h3>
+        <div class="prop-row">
+          <label>Target Reduction <span class="value" id="reduction-value">50%</span></label>
+          <input type="range" id="reduction-slider" min="10" max="95" value="50" oninput="updateReductionValue()">
+        </div>
+        <div class="prop-row">
+          <label>Target Triangles <span class="value" id="target-tris-value">-</span></label>
+        </div>
+        <button class="btn primary" id="simplify-btn" onclick="simplifyMesh()" disabled>Simplify Mesh</button>
+        <div class="progress-bar"><div class="fill" id="progress"></div></div>
+        <div class="comparison-stats" id="comparison-stats" style="display: none;">
+          <div class="col">
+            <div class="col-label">Original</div>
+            <div class="col-value" id="compare-orig">-</div>
+          </div>
+          <div class="col">
+            <div class="col-label">Simplified</div>
+            <div class="col-value" id="compare-simplified">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>4. Preview</h3>
+        <div class="toggle-row">
+          <input type="checkbox" id="show-original" checked onchange="toggleOriginal()">
+          <label for="show-original">Show original (gray)</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="show-simplified" checked onchange="toggleSimplified()">
+          <label for="show-simplified">Show simplified (blue)</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="show-wireframe" onchange="toggleWireframe()">
+          <label for="show-wireframe">Wireframe mode</label>
+        </div>
+        <div class="prop-row">
+          <label>Move Speed <span class="value" id="speed-value">0.15</span></label>
+          <input type="range" id="speed-slider" min="0.01" max="1" step="0.01" value="0.15" oninput="updateSpeed()">
+        </div>
+        <button class="btn" onclick="resetCamera()">Reset Camera</button>
+      </div>
+
+      <div class="toolbar-group">
+        <h3>5. Export</h3>
+        <button class="btn primary" id="export-btn" onclick="exportGLB()" disabled>Export Simplified .glb</button>
+        <div class="stats-row" style="margin-top: 8px;">
+          <span class="label">Reduction:</span> <span class="value" id="stat-reduction">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">
+    Drop a splat or mesh file to begin.
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "@sparkjsdev/spark": "../lib/spark.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { SplatMesh } from '@sparkjsdev/spark';
+
+    // Load three-mesh-bvh for fast raycasting
+    let bvhReady = false;
+    let computeBoundsTree, disposeBoundsTree, acceleratedRaycast;
+    async function initBVH() {
+      try {
+        const module = await import('https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js');
+        computeBoundsTree = module.computeBoundsTree;
+        disposeBoundsTree = module.disposeBoundsTree;
+        acceleratedRaycast = module.acceleratedRaycast;
+        THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+        THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+        THREE.Mesh.prototype.raycast = acceleratedRaycast;
+        bvhReady = true;
+        console.log('three-mesh-bvh loaded and ready');
+      } catch (err) {
+        console.warn('Failed to load three-mesh-bvh, raycasting will be slow:', err);
+      }
+    }
+    initBVH();
+
+    const statusEl = document.getElementById('status');
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+    function setProgress(value) {
+      const fill = document.getElementById('progress');
+      fill.style.width = `${value}%`;
+    }
+    function setSplatProgress(value) {
+      const fill = document.getElementById('splat-progress');
+      fill.style.width = `${value}%`;
+    }
+
+    // ========== Tabs ==========
+    let activeTab = 'splat';
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    function setActiveTab(tabId) {
+      activeTab = tabId;
+      tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+      tabPanels.forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tabId}`));
+      updateSceneForTab();
+    }
+    tabButtons.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+
+    function updateSceneForTab() {
+      const isSplat = activeTab === 'splat';
+      if (pointsCloud) pointsCloud.visible = isSplat && document.getElementById('splat-show-points').checked;
+      if (generatedMesh) generatedMesh.visible = isSplat && document.getElementById('splat-show-mesh').checked;
+      if (edgesHelper) edgesHelper.visible = isSplat && document.getElementById('splat-show-edges').checked;
+      if (verticesCloud) verticesCloud.visible = isSplat && document.getElementById('splat-show-vertices').checked;
+
+      if (originalMesh) originalMesh.visible = !isSplat && document.getElementById('show-original').checked;
+      if (simplifiedMesh) simplifiedMesh.visible = !isSplat && document.getElementById('show-simplified').checked;
+      if (patchPlane) {
+        if (isSplat) {
+          patchPlane.visible = false;
+        } else {
+          updatePatchVisibility();
+        }
+      }
+    }
+
+    // ========== Scene Setup ==========
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 10000);
+    camera.position.set(5, 5, 5);
+    camera.rotation.order = 'YXZ';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    // Grid helper
+    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
+    scene.add(grid);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
+
+    // ========== State ==========
+    let allSplats = [];
+    let sampledPositions = [];
+    let pointsCloud = null;
+    let generatedMesh = null;
+    let edgesHelper = null;
+    let verticesCloud = null;
+
+    let originalMesh = null;
+    let simplifiedMesh = null;
+    let originalTriCount = 0;
+    let originalVertCount = 0;
+    let fileSize = 0;
+
+    let patchMode = false;
+    let patchSize = 0.5;
+    let patchDistance = 1.0;
+    let patchSpacing = 0.25;
+    let patchPlane = null;
+    let isPainting = false;
+    let lastPaintPosition = null;
+    let snapToSurface = true;
+    let alignToNormal = false;
+    const patchUndoStack = [];
+    const PATCH_UNDO_LIMIT = 20;
+
+    // ========== WASD + Drag-Look Controls ==========
+    const keyState = {};
+    let moveSpeed = 0.15;
+    let yaw = 0;
+    let pitch = 0;
+    const maxPitch = Math.PI / 2 - 0.01;
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
+    document.addEventListener('keydown', (e) => { keyState[e.code] = true; });
+    document.addEventListener('keyup', (e) => { keyState[e.code] = false; });
+
+    renderer.domElement.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    });
+    renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
+    renderer.domElement.addEventListener('mouseleave', () => { isDragging = false; });
+    renderer.domElement.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      yaw -= dx * 0.005;
+      pitch -= dy * 0.005;
+      pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    });
+
+    function updateMovement() {
+      const speed = keyState['ShiftLeft'] || keyState['ShiftRight'] ? moveSpeed * 3 : moveSpeed;
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+      const movement = new THREE.Vector3();
+      if (keyState['KeyW']) movement.add(forward);
+      if (keyState['KeyS']) movement.sub(forward);
+      if (keyState['KeyA']) movement.sub(right);
+      if (keyState['KeyD']) movement.add(right);
+      if (keyState['KeyR']) movement.y += 1;
+      if (keyState['KeyF']) movement.y -= 1;
+      if (movement.lengthSq() > 0) {
+        movement.normalize().multiplyScalar(speed);
+        camera.position.add(movement);
+      }
+    }
+
+    function centerCameraOnPoints() {
+      if (sampledPositions.length === 0) return;
+      const bounds = new THREE.Box3();
+      for (const pos of sampledPositions) {
+        bounds.expandByPoint(pos);
+      }
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 10;
+      camera.position.set(
+        center.x + maxDim * 1.2,
+        center.y + maxDim * 0.8,
+        center.z + maxDim * 1.2
+      );
+      camera.lookAt(center);
+      yaw = camera.rotation.y;
+      pitch = camera.rotation.x;
+    }
+
+    function centerCameraOnGeneratedMesh() {
+      if (!generatedMesh) return;
+      const bounds = new THREE.Box3().setFromObject(generatedMesh);
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 10;
+      camera.position.set(
+        center.x + maxDim * 1.2,
+        center.y + maxDim * 0.8,
+        center.z + maxDim * 1.2
+      );
+      camera.lookAt(center);
+      yaw = camera.rotation.y;
+      pitch = camera.rotation.x;
+    }
+
+    function centerCamera() {
+      if (!originalMesh) return;
+      const bounds = new THREE.Box3().setFromObject(originalMesh);
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 10;
+      camera.position.set(
+        center.x + maxDim * 1.2,
+        center.y + maxDim * 0.8,
+        center.z + maxDim * 1.2
+      );
+      camera.lookAt(center);
+      yaw = camera.rotation.y;
+      pitch = camera.rotation.x;
+    }
+
+    window.resetCamera = centerCamera;
+    window.updateSpeed = function() {
+      moveSpeed = parseFloat(document.getElementById('speed-slider').value);
+      document.getElementById('speed-value').textContent = moveSpeed.toFixed(2);
+    };
+
+    // ========== Patch Preview Plane ==========
+    const patchGeometry = new THREE.PlaneGeometry(1, 1);
+    const patchMaterial = new THREE.MeshBasicMaterial({
+      color: 0x44ff44,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    });
+    patchPlane = new THREE.Mesh(patchGeometry, patchMaterial);
+    patchPlane.visible = false;
+    scene.add(patchPlane);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    renderer.domElement.addEventListener('mousemove', (e) => {
+      if (!patchMode) return;
+      updateMouse(e);
+      updatePatchPlane();
+      if (isPainting) maybePaintPatch();
+    });
+    renderer.domElement.addEventListener('mousedown', (e) => {
+      if (!patchMode || e.button !== 0) return;
+      updateMouse(e);
+      updatePatchPlane();
+      isPainting = true;
+      maybePaintPatch();
+    });
+    renderer.domElement.addEventListener('mouseup', () => {
+      isPainting = false;
+      lastPaintPosition = null;
+    });
+
+    function updateMouse(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    function getPatchTargetMesh() {
+      return simplifiedMesh || null;
+    }
+
+    function updatePatchPlane() {
+      raycaster.setFromCamera(mouse, camera);
+      const targetMesh = getPatchTargetMesh();
+      if (snapToSurface && targetMesh) {
+        const wasVisible = targetMesh.visible;
+        targetMesh.visible = true;
+        const intersects = raycaster.intersectObject(targetMesh, false);
+        targetMesh.visible = wasVisible || document.getElementById('show-simplified').checked;
+        if (intersects.length > 0) {
+          const hit = intersects[0];
+          patchPlane.position.copy(hit.point);
+          const toCamera = camera.position.clone().sub(hit.point).normalize();
+          patchPlane.position.addScaledVector(toCamera, 0.01);
+          if (alignToNormal && hit.face) {
+            const normal = hit.face.normal.clone().transformDirection(targetMesh.matrixWorld);
+            patchPlane.lookAt(patchPlane.position.clone().add(normal));
+          } else {
+            patchPlane.lookAt(camera.position);
+          }
+          patchPlane.scale.setScalar(patchSize);
+          patchPlane.material.color.setHex(0x44ff44);
+          return;
+        }
+      }
+      const point = raycaster.ray.at(patchDistance, new THREE.Vector3());
+      patchPlane.position.copy(point);
+      patchPlane.scale.setScalar(patchSize);
+      patchPlane.lookAt(camera.position);
+      patchPlane.material.color.setHex(0xff4444);
+    }
+
+    function maybePaintPatch() {
+      if (!patchPlane.visible) return;
+      const current = patchPlane.position.clone();
+      if (!lastPaintPosition || current.distanceTo(lastPaintPosition) >= patchSpacing) {
+        placePatch();
+        lastPaintPosition = current.clone();
+      }
+    }
+
+    function updatePatchVisibility() {
+      const showSimplified = document.getElementById('show-simplified').checked;
+      patchPlane.visible = patchMode && showSimplified && !!simplifiedMesh && activeTab === 'simplify';
+    }
+
+    function updatePatchUndoButton() {
+      const btn = document.getElementById('patch-undo-btn');
+      if (btn) {
+        btn.disabled = patchUndoStack.length === 0;
+      }
+    }
+
+    window.togglePatchMode = function() {
+      patchMode = document.getElementById('patch-mode').checked;
+      updatePatchVisibility();
+      isPainting = false;
+      lastPaintPosition = null;
+      if (patchMode) {
+        if (!simplifiedMesh) {
+          setStatus('Patch mode enabled, but requires a simplified mesh. Run Simplify first.');
+        } else {
+          setStatus('Patch mode enabled. Click/drag to paint quads (faces camera).');
+        }
+      } else {
+        setStatus('Patch mode disabled.');
+      }
+    };
+
+    window.toggleSnapToSurface = function() {
+      snapToSurface = document.getElementById('snap-to-surface').checked;
+    };
+    window.toggleAlignToNormal = function() {
+      alignToNormal = document.getElementById('align-to-normal').checked;
+    };
+    window.updatePatchSize = function() {
+      patchSize = parseFloat(document.getElementById('patch-size').value);
+      document.getElementById('patch-size-value').textContent = patchSize.toFixed(2);
+      if (patchPlane) patchPlane.scale.setScalar(patchSize);
+    };
+    window.updatePatchDistance = function() {
+      patchDistance = parseFloat(document.getElementById('patch-distance').value);
+      document.getElementById('patch-distance-value').textContent = patchDistance.toFixed(2);
+    };
+    window.updatePatchSpacing = function() {
+      patchSpacing = parseFloat(document.getElementById('patch-spacing').value);
+      document.getElementById('patch-spacing-value').textContent = patchSpacing.toFixed(2);
+    };
+
+    function placePatch() {
+      const targetMesh = getPatchTargetMesh();
+      if (!targetMesh || !patchPlane.visible) {
+        if (!targetMesh) {
+          setStatus('Patch tool requires a simplified mesh. Run Simplify first.');
+        }
+        return;
+      }
+
+      try {
+        if (patchUndoStack.length >= PATCH_UNDO_LIMIT) {
+          const dropped = patchUndoStack.shift();
+          dropped?.dispose?.();
+        }
+        patchUndoStack.push(targetMesh.geometry.clone());
+        updatePatchUndoButton();
+
+        const oldGeometry = targetMesh.geometry;
+        const posAttr = oldGeometry.getAttribute('position');
+        if (!posAttr) return;
+
+        const half = patchSize * 0.5;
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(patchPlane.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(patchPlane.quaternion);
+        const center = patchPlane.position.clone();
+
+        const p0 = center.clone().addScaledVector(right, -half).addScaledVector(up, -half);
+        const p1 = center.clone().addScaledVector(right, half).addScaledVector(up, -half);
+        const p2 = center.clone().addScaledVector(right, -half).addScaledVector(up, half);
+        const p3 = center.clone().addScaledVector(right, half).addScaledVector(up, half);
+
+        const oldVertexCount = posAttr.count;
+        const baseIndex = oldVertexCount;
+        const newVertexCount = oldVertexCount + 4;
+
+        const newPositions = new Float32Array(newVertexCount * 3);
+        for (let i = 0; i < oldVertexCount; i++) {
+          newPositions[i * 3] = posAttr.getX(i);
+          newPositions[i * 3 + 1] = posAttr.getY(i);
+          newPositions[i * 3 + 2] = posAttr.getZ(i);
+        }
+        newPositions.set(
+          [p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z],
+          oldVertexCount * 3
+        );
+
+        const oldIndexAttr = oldGeometry.getIndex();
+        const oldIndexCount = oldIndexAttr ? oldIndexAttr.count : oldVertexCount;
+        const newIndices = new Uint32Array(oldIndexCount + 6);
+
+        if (oldIndexAttr) {
+          for (let i = 0; i < oldIndexCount; i++) {
+            newIndices[i] = oldIndexAttr.getX(i);
+          }
+        } else {
+          for (let i = 0; i < oldVertexCount; i++) {
+            newIndices[i] = i;
+          }
+        }
+
+        newIndices[oldIndexCount] = baseIndex;
+        newIndices[oldIndexCount + 1] = baseIndex + 1;
+        newIndices[oldIndexCount + 2] = baseIndex + 2;
+        newIndices[oldIndexCount + 3] = baseIndex + 2;
+        newIndices[oldIndexCount + 4] = baseIndex + 1;
+        newIndices[oldIndexCount + 5] = baseIndex + 3;
+
+        const newGeometry = new THREE.BufferGeometry();
+        newGeometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+        newGeometry.setIndex(new THREE.BufferAttribute(newIndices, 1));
+        newGeometry.computeVertexNormals();
+        newGeometry.computeBoundingSphere();
+
+        targetMesh.geometry = newGeometry;
+        if (oldGeometry.disposeBoundsTree) oldGeometry.disposeBoundsTree();
+        oldGeometry.dispose();
+
+        if (bvhReady && newGeometry.computeBoundsTree) {
+          newGeometry.computeBoundsTree();
+        }
+      } catch (err) {
+        console.error('Patch error:', err);
+      }
+    }
+
+    window.undoPatch = function() {
+      const targetMesh = getPatchTargetMesh();
+      if (!targetMesh) {
+        setStatus('Nothing to undo. Simplify a mesh first.');
+        return;
+      }
+      const previous = patchUndoStack.pop();
+      if (!previous) {
+        updatePatchUndoButton();
+        return;
+      }
+      const oldGeometry = targetMesh.geometry;
+      targetMesh.geometry = previous;
+      if (oldGeometry.disposeBoundsTree) oldGeometry.disposeBoundsTree();
+      oldGeometry.dispose();
+      if (bvhReady && targetMesh.geometry.computeBoundsTree) {
+        targetMesh.geometry.computeBoundsTree();
+      }
+      updatePatchUndoButton();
+      setStatus('Undid last patch.');
+    };
+
+    // ========== File Loading ==========
+    const splatFileInput = document.getElementById('splat-file-input');
+    const meshFileInput = document.getElementById('mesh-file-input');
+
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+
+      if (isMeshFile(file.name)) {
+        setActiveTab('simplify');
+        await loadGLBFile(file);
+      } else if (isSplatFile(file.name)) {
+        setActiveTab('splat');
+        await loadSplatFile(file);
+      } else {
+        setStatus('Unsupported file type. Use .spz/.ply/.splat/.gz or .glb/.gltf');
+      }
+    });
+
+    splatFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        setActiveTab('splat');
+        await loadSplatFile(file);
+      }
+    });
+
+    meshFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        setActiveTab('simplify');
+        await loadGLBFile(file);
+      }
+    });
+
+    function isMeshFile(name) {
+      return name.endsWith('.glb') || name.endsWith('.gltf');
+    }
+    function isSplatFile(name) {
+      return name.endsWith('.spz') || name.endsWith('.ply') || name.endsWith('.splat') || name.endsWith('.gz');
+    }
+
+    // ========== Splat Loading ==========
+    async function loadSplatFile(file) {
+      try {
+        setStatus('Loading splat file...');
+        const arrayBuffer = await file.arrayBuffer();
+        const fileBytes = new Uint8Array(arrayBuffer);
+        const splatMesh = new SplatMesh({ fileBytes, fileName: file.name });
+        await splatMesh.initialized;
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const packedSplats = splatMesh.packedSplats;
+        const numSplats = packedSplats?.numSplats || 0;
+        document.getElementById('splat-stat-splats').textContent = numSplats.toLocaleString();
+        if (numSplats === 0) {
+          setStatus('Error: No splats found in file');
+          return;
+        }
+        allSplats = [];
+        for (let i = 0; i < numSplats; i++) {
+          const splat = packedSplats.getSplat(i);
+          const pos = splat.center;
+          if (pos && isFinite(pos.x) && isFinite(pos.y) && isFinite(pos.z)) {
+            const opacity = splat.opacity ?? splat.rgba?.a ?? 1;
+            allSplats.push({ pos: new THREE.Vector3(pos.x, pos.y, pos.z), alpha: opacity });
+          }
+        }
+        splatMesh.dispose();
+        updateSampledPositions();
+        centerCameraOnPoints();
+        document.getElementById('splat-generate-btn').disabled = false;
+        setStatus(`Loaded ${numSplats.toLocaleString()} splats. Adjust sampling and generate mesh.`);
+      } catch (err) {
+        console.error('Splat load error:', err);
+        setStatus('Error: ' + err.message);
+      }
+    }
+
+    function updateSampledPositions() {
+      const sampleRate = parseInt(document.getElementById('splat-sample-rate').value) / 100;
+      const opacityThreshold = parseFloat(document.getElementById('splat-opacity').value);
+
+      const filtered = allSplats.filter(s => s.alpha >= opacityThreshold);
+      document.getElementById('splat-stat-filtered').textContent = filtered.length.toLocaleString();
+
+      const numSamples = Math.max(1, Math.floor(filtered.length * sampleRate));
+      sampledPositions = [];
+      const step = Math.max(1, Math.floor(filtered.length / numSamples));
+      for (let i = 0; i < filtered.length; i += step) {
+        sampledPositions.push(filtered[i].pos);
+      }
+      document.getElementById('splat-stat-points').textContent = sampledPositions.length.toLocaleString();
+      updatePointCloud();
+    }
+
+    function updatePointCloud() {
+      if (pointsCloud) {
+        scene.remove(pointsCloud);
+        pointsCloud.geometry.dispose();
+        pointsCloud.material.dispose();
+      }
+      if (sampledPositions.length === 0) return;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(sampledPositions.length * 3);
+      for (let i = 0; i < sampledPositions.length; i++) {
+        positions[i * 3] = sampledPositions[i].x;
+        positions[i * 3 + 1] = sampledPositions[i].y;
+        positions[i * 3 + 2] = sampledPositions[i].z;
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.PointsMaterial({
+        color: 0x4a9aff,
+        size: 0.02,
+        sizeAttenuation: true
+      });
+      pointsCloud = new THREE.Points(geometry, material);
+      pointsCloud.visible = document.getElementById('splat-show-points').checked && activeTab === 'splat';
+      scene.add(pointsCloud);
+    }
+
+    window.updateSplatOpacityThreshold = function() {
+      const value = parseFloat(document.getElementById('splat-opacity').value);
+      document.getElementById('splat-opacity-value').textContent = value.toFixed(2);
+      updateSampledPositions();
+    };
+    window.updateSplatSampleRate = function() {
+      const value = parseInt(document.getElementById('splat-sample-rate').value);
+      document.getElementById('splat-sample-value').textContent = `${value}%`;
+      updateSampledPositions();
+    };
+    window.updateSplatVoxelRes = function() {
+      const value = parseInt(document.getElementById('splat-voxel').value);
+      document.getElementById('splat-voxel-value').textContent = value.toString();
+    };
+    window.updateSplatFillRadius = function() {
+      const value = parseFloat(document.getElementById('splat-fill-radius').value);
+      document.getElementById('splat-fill-value').textContent = value.toFixed(1);
+    };
+
+    window.toggleSplatPoints = function() {
+      if (pointsCloud) pointsCloud.visible = document.getElementById('splat-show-points').checked;
+    };
+    window.toggleSplatMesh = function() {
+      if (generatedMesh) generatedMesh.visible = document.getElementById('splat-show-mesh').checked;
+      if (edgesHelper) edgesHelper.visible = document.getElementById('splat-show-edges').checked;
+      if (verticesCloud) verticesCloud.visible = document.getElementById('splat-show-vertices').checked;
+    };
+    window.toggleSplatWireframe = function() {
+      if (generatedMesh) {
+        generatedMesh.material.wireframe = document.getElementById('splat-show-wireframe').checked;
+      }
+    };
+    window.toggleSplatEdges = function() {
+      const showEdges = document.getElementById('splat-show-edges').checked;
+      if (showEdges && generatedMesh) updateEdgesHelper();
+      if (edgesHelper) edgesHelper.visible = showEdges;
+    };
+    window.toggleSplatVertices = function() {
+      const showVertices = document.getElementById('splat-show-vertices').checked;
+      if (showVertices && generatedMesh) updateVerticesCloud();
+      if (verticesCloud) verticesCloud.visible = showVertices;
+    };
+
+    async function generateSplatMesh() {
+      if (sampledPositions.length === 0) {
+        setStatus('No points to process. Load a splat file first.');
+        return;
+      }
+      setStatus('Generating mesh...');
+      setSplatProgress(0);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const resolution = parseInt(document.getElementById('splat-voxel').value);
+      const fillRadius = parseFloat(document.getElementById('splat-fill-radius').value);
+
+      try {
+        const bounds = new THREE.Box3();
+        for (const pos of sampledPositions) {
+          bounds.expandByPoint(pos);
+        }
+        bounds.expandByScalar(0.5);
+
+        const size = bounds.getSize(new THREE.Vector3());
+        const maxSize = Math.max(size.x, size.y, size.z);
+        const voxelSize = maxSize / resolution;
+
+        const nx = Math.ceil(size.x / voxelSize) + 2;
+        const ny = Math.ceil(size.y / voxelSize) + 2;
+        const nz = Math.ceil(size.z / voxelSize) + 2;
+
+        setSplatProgress(10);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const voxels = new Float32Array(nx * ny * nz);
+        const fillRadiusInt = Math.ceil(fillRadius);
+
+        for (let i = 0; i < sampledPositions.length; i++) {
+          const pos = sampledPositions[i];
+          const vxf = (pos.x - bounds.min.x) / voxelSize;
+          const vyf = (pos.y - bounds.min.y) / voxelSize;
+          const vzf = (pos.z - bounds.min.z) / voxelSize;
+          const vx = Math.floor(vxf);
+          const vy = Math.floor(vyf);
+          const vz = Math.floor(vzf);
+          for (let dx = -fillRadiusInt; dx <= fillRadiusInt; dx++) {
+            for (let dy = -fillRadiusInt; dy <= fillRadiusInt; dy++) {
+              for (let dz = -fillRadiusInt; dz <= fillRadiusInt; dz++) {
+                const ix = vx + dx;
+                const iy = vy + dy;
+                const iz = vz + dz;
+                if (ix >= 0 && ix < nx && iy >= 0 && iy < ny && iz >= 0 && iz < nz) {
+                  const actualDx = ix - vxf + 0.5;
+                  const actualDy = iy - vyf + 0.5;
+                  const actualDz = iz - vzf + 0.5;
+                  const dist = Math.sqrt(actualDx*actualDx + actualDy*actualDy + actualDz*actualDz);
+                  const weight = Math.max(0, 1 - dist / (fillRadius + 0.5));
+                  const idx = ix + iy * nx + iz * nx * ny;
+                  voxels[idx] = Math.max(voxels[idx], weight);
+                }
+              }
+            }
+          }
+          if (i % 10000 === 0) {
+            setSplatProgress(10 + (i / sampledPositions.length) * 30);
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+
+        setSplatProgress(40);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const { vertices, indices } = marchingCubes(voxels, nx, ny, nz, bounds, voxelSize, 0.5);
+        setSplatProgress(80);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        if (vertices.length === 0) {
+          setStatus('No mesh generated. Try increasing fill radius or sample rate.');
+          setSplatProgress(0);
+          return;
+        }
+
+        if (generatedMesh) {
+          scene.remove(generatedMesh);
+          generatedMesh.geometry.dispose();
+          generatedMesh.material.dispose();
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x88aaff,
+          side: THREE.DoubleSide,
+          wireframe: document.getElementById('splat-show-wireframe').checked
+        });
+
+        generatedMesh = new THREE.Mesh(geometry, material);
+        generatedMesh.visible = document.getElementById('splat-show-mesh').checked && activeTab === 'splat';
+        scene.add(generatedMesh);
+
+        updateMeshHelpers();
+        centerCameraOnGeneratedMesh();
+        updateSceneForTab();
+
+        document.getElementById('splat-stat-verts').textContent = (vertices.length / 3).toLocaleString();
+        document.getElementById('splat-stat-tris').textContent = (indices.length / 3).toLocaleString();
+        document.getElementById('splat-export-btn').disabled = false;
+        document.getElementById('send-to-simplify-btn').disabled = false;
+
+        setSplatProgress(100);
+        setStatus(`Generated mesh with ${(vertices.length/3).toLocaleString()} vertices, ${(indices.length/3).toLocaleString()} triangles`);
+        setTimeout(() => setSplatProgress(0), 1000);
+      } catch (err) {
+        console.error('Error generating mesh:', err);
+        setStatus('Error: ' + err.message);
+        setSplatProgress(0);
+      }
+    }
+
+    window.generateSplatMesh = generateSplatMesh;
+
+    function updateEdgesHelper() {
+      if (edgesHelper) {
+        scene.remove(edgesHelper);
+        edgesHelper.geometry.dispose();
+        edgesHelper.material.dispose();
+        edgesHelper = null;
+      }
+      if (!generatedMesh) return;
+      const edgesGeometry = new THREE.EdgesGeometry(generatedMesh.geometry, 1);
+      const edgesMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xffff00,
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.8
+      });
+      edgesHelper = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+      edgesHelper.position.copy(generatedMesh.position);
+      edgesHelper.rotation.copy(generatedMesh.rotation);
+      edgesHelper.scale.copy(generatedMesh.scale);
+      edgesHelper.visible = document.getElementById('splat-show-edges').checked && activeTab === 'splat';
+      scene.add(edgesHelper);
+    }
+
+    function updateVerticesCloud() {
+      if (verticesCloud) {
+        scene.remove(verticesCloud);
+        verticesCloud.geometry.dispose();
+        verticesCloud.material.dispose();
+        verticesCloud = null;
+      }
+      if (!generatedMesh) return;
+      const positions = generatedMesh.geometry.getAttribute('position');
+      if (!positions) return;
+      const pointsGeometry = new THREE.BufferGeometry();
+      pointsGeometry.setAttribute('position', positions.clone());
+      const pointsMaterial = new THREE.PointsMaterial({
+        color: 0xff4444,
+        size: 0.05,
+        sizeAttenuation: true
+      });
+      verticesCloud = new THREE.Points(pointsGeometry, pointsMaterial);
+      verticesCloud.position.copy(generatedMesh.position);
+      verticesCloud.rotation.copy(generatedMesh.rotation);
+      verticesCloud.scale.copy(generatedMesh.scale);
+      verticesCloud.visible = document.getElementById('splat-show-vertices').checked && activeTab === 'splat';
+      scene.add(verticesCloud);
+    }
+
+    function updateMeshHelpers() {
+      if (document.getElementById('splat-show-edges').checked) {
+        updateEdgesHelper();
+      }
+      if (document.getElementById('splat-show-vertices').checked) {
+        updateVerticesCloud();
+      }
+    }
+
+    window.exportSplatGLB = async function() {
+      if (!generatedMesh) {
+        setStatus('No mesh to export. Generate one first.');
+        return;
+      }
+      setStatus('Exporting GLB...');
+      const exportScene = new THREE.Scene();
+      const exportMesh = generatedMesh.clone();
+      exportMesh.material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+      exportScene.add(exportMesh);
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        exportScene,
+        (gltf) => {
+          const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'collision-mesh.glb';
+          a.click();
+          URL.revokeObjectURL(url);
+          setStatus('Exported collision-mesh.glb');
+        },
+        (error) => {
+          console.error('Export error:', error);
+          setStatus('Export failed. See console.');
+        },
+        { binary: true }
+      );
+    };
+
+    window.sendToSimplify = function() {
+      if (!generatedMesh) {
+        setStatus('No generated mesh to send. Generate one first.');
+        return;
+      }
+      fileSize = 0;
+      const geometry = generatedMesh.geometry.clone();
+      geometry.applyMatrix4(generatedMesh.matrixWorld);
+      loadSimplifyGeometry(geometry, 'Generated mesh');
+      setActiveTab('simplify');
+    };
+
+    // ========== Simplify Loading ==========
+    async function loadGLBFile(file) {
+      try {
+        setStatus('Loading mesh...');
+        fileSize = file.size;
+
+        const arrayBuffer = await file.arrayBuffer();
+        const loader = new GLTFLoader();
+        const gltf = await new Promise((resolve, reject) => {
+          loader.parse(arrayBuffer, '', resolve, reject);
+        });
+
+        const geometries = [];
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) {
+            const geo = child.geometry.clone();
+            child.updateWorldMatrix(true, false);
+            geo.applyMatrix4(child.matrixWorld);
+            geometries.push(geo);
+          }
+        });
+
+        if (geometries.length === 0) {
+          setStatus('Error: No mesh found in file');
+          return;
+        }
+
+        let mergedGeometry;
+        if (geometries.length === 1) {
+          mergedGeometry = geometries[0];
+        } else {
+          mergedGeometry = mergeBufferGeometries(geometries);
+        }
+
+        if (!mergedGeometry.index) {
+          mergedGeometry = toIndexedGeometry(mergedGeometry);
+        }
+
+        loadSimplifyGeometry(mergedGeometry, file.name);
+      } catch (err) {
+        console.error('Error loading GLB:', err);
+        setStatus('Error: ' + err.message);
+      }
+    }
+
+    function loadSimplifyGeometry(geometry, label = 'mesh') {
+      if (originalMesh) {
+        scene.remove(originalMesh);
+        originalMesh.geometry.dispose();
+        originalMesh.material.dispose();
+      }
+      if (simplifiedMesh) {
+        scene.remove(simplifiedMesh);
+        simplifiedMesh.geometry.dispose();
+        simplifiedMesh.material.dispose();
+        simplifiedMesh = null;
+      }
+      patchUndoStack.length = 0;
+      updatePatchUndoButton();
+
+      const originalMaterial = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.5
+      });
+
+      originalMesh = new THREE.Mesh(geometry, originalMaterial);
+      originalMesh.visible = document.getElementById('show-original').checked && activeTab === 'simplify';
+      scene.add(originalMesh);
+
+      if (bvhReady && geometry.computeBoundsTree) {
+        geometry.computeBoundsTree();
+      }
+
+      originalVertCount = geometry.getAttribute('position').count;
+      originalTriCount = geometry.index ? geometry.index.count / 3 : originalVertCount / 3;
+
+      document.getElementById('stat-orig-verts').textContent = originalVertCount.toLocaleString();
+      document.getElementById('stat-orig-tris').textContent = Math.floor(originalTriCount).toLocaleString();
+      document.getElementById('stat-file-size').textContent = fileSize ? formatFileSize(fileSize) : '-';
+
+      document.getElementById('simplify-btn').disabled = false;
+      updateReductionValue();
+      centerCamera();
+      document.getElementById('comparison-stats').style.display = 'none';
+      document.getElementById('export-btn').disabled = true;
+      document.getElementById('stat-reduction').textContent = '-';
+      updatePatchVisibility();
+      setStatus(`Loaded ${label} with ${originalTriCount.toLocaleString()} triangles. Adjust reduction and click Simplify.`);
+    }
+
+    // ========== Simplify Utilities ==========
+    function mergeBufferGeometries(geometries) {
+      const positions = [];
+      const indices = [];
+      let indexOffset = 0;
+      for (const geo of geometries) {
+        const pos = geo.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+        }
+        if (geo.index) {
+          const idx = geo.index;
+          for (let i = 0; i < idx.count; i++) {
+            indices.push(idx.getX(i) + indexOffset);
+          }
+        } else {
+          for (let i = 0; i < pos.count; i++) {
+            indices.push(i + indexOffset);
+          }
+        }
+        indexOffset += pos.count;
+      }
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      merged.setIndex(indices);
+      merged.computeVertexNormals();
+      return merged;
+    }
+
+    function toIndexedGeometry(geometry) {
+      const positions = geometry.getAttribute('position');
+      const vertexMap = new Map();
+      const newPositions = [];
+      const indices = [];
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const z = positions.getZ(i);
+        const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+        if (vertexMap.has(key)) {
+          indices.push(vertexMap.get(key));
+        } else {
+          const idx = newPositions.length / 3;
+          vertexMap.set(key, idx);
+          newPositions.push(x, y, z);
+          indices.push(idx);
+        }
+      }
+      const indexed = new THREE.BufferGeometry();
+      indexed.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+      indexed.setIndex(indices);
+      indexed.computeVertexNormals();
+      return indexed;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    // ========== Simplify ==========
+    let MeshoptSimplifier = null;
+    let meshoptReady = false;
+    async function initMeshopt() {
+      try {
+        setStatus('Loading meshoptimizer WASM...');
+        const module = await import('https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.js');
+        MeshoptSimplifier = module.MeshoptSimplifier;
+        await MeshoptSimplifier.ready;
+        meshoptReady = true;
+        setStatus('Ready. Drop a file to begin.');
+      } catch (err) {
+        console.error('Failed to load meshoptimizer:', err);
+        setStatus('Error: Failed to load meshoptimizer. Check console.');
+      }
+    }
+    initMeshopt();
+
+    window.updateReductionValue = function() {
+      const reduction = parseInt(document.getElementById('reduction-slider').value);
+      document.getElementById('reduction-value').textContent = reduction + '%';
+      if (originalTriCount > 0) {
+        const target = Math.max(4, Math.floor(originalTriCount * (1 - reduction / 100)));
+        document.getElementById('target-tris-value').textContent = target.toLocaleString();
+      }
+    };
+
+    window.simplifyMesh = async function() {
+      if (!originalMesh) return;
+      if (!meshoptReady) {
+        setStatus('Error: meshoptimizer not loaded yet. Please wait...');
+        return;
+      }
+
+      setStatus('Simplifying mesh (meshoptimizer)...');
+      setProgress(10);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const startTime = performance.now();
+
+      try {
+        const reduction = document.getElementById('reduction-slider').value / 100;
+        const targetTriCount = Math.max(4, Math.floor(originalTriCount * (1 - reduction)));
+
+        const geometry = originalMesh.geometry;
+        const positions = geometry.getAttribute('position');
+        const index = geometry.getIndex();
+
+        if (!index) {
+          setStatus('Error: Mesh must be indexed');
+          return;
+        }
+
+        const vertexCount = positions.count;
+        const indexCount = index.count;
+
+        const vertices = new Float32Array(vertexCount * 3);
+        for (let i = 0; i < vertexCount; i++) {
+          vertices[i * 3] = positions.getX(i);
+          vertices[i * 3 + 1] = positions.getY(i);
+          vertices[i * 3 + 2] = positions.getZ(i);
+        }
+
+        const indices = new Uint32Array(indexCount);
+        for (let i = 0; i < indexCount; i++) {
+          indices[i] = index.getX(i);
+        }
+
+        let maxIdx = 0;
+        for (let i = 0; i < indices.length; i++) {
+          if (indices[i] > maxIdx) maxIdx = indices[i];
+        }
+        if (maxIdx >= vertexCount) {
+          setStatus('Error: Invalid mesh - indices out of bounds');
+          return;
+        }
+
+        setProgress(30);
+        setStatus(`Simplifying ${originalTriCount.toLocaleString()} → ${targetTriCount.toLocaleString()} triangles...`);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const targetIndexCount = targetTriCount * 3;
+        const targetError = 0.01;
+
+        const result = MeshoptSimplifier.simplify(
+          indices,
+          vertices,
+          3,
+          targetIndexCount,
+          targetError
+        );
+
+        let newIndices = result[0];
+        let newIndexCount = newIndices?.length ?? 0;
+
+        if (newIndexCount === 0) {
+          const retry = MeshoptSimplifier.simplify(
+            indices,
+            vertices,
+            3,
+            targetIndexCount,
+            1.0
+          );
+          newIndices = retry[0];
+          newIndexCount = newIndices?.length ?? 0;
+          if (newIndexCount === 0) {
+            setStatus('Error: Simplification returned 0 triangles.');
+            setProgress(0);
+            return;
+          }
+        }
+
+        setProgress(70);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const usedVertices = new Set();
+        for (let i = 0; i < newIndexCount; i++) {
+          usedVertices.add(newIndices[i]);
+        }
+
+        const vertexRemap = new Map();
+        const newVertices = [];
+        let newVertexIndex = 0;
+        for (const oldIndex of usedVertices) {
+          vertexRemap.set(oldIndex, newVertexIndex++);
+          newVertices.push(
+            vertices[oldIndex * 3],
+            vertices[oldIndex * 3 + 1],
+            vertices[oldIndex * 3 + 2]
+          );
+        }
+
+        const remappedIndices = [];
+        for (let i = 0; i < newIndexCount; i++) {
+          remappedIndices.push(vertexRemap.get(newIndices[i]));
+        }
+
+        setProgress(85);
+
+        const simplifiedGeometry = new THREE.BufferGeometry();
+        simplifiedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(newVertices, 3));
+        simplifiedGeometry.setIndex(remappedIndices);
+        simplifiedGeometry.computeVertexNormals();
+
+        if (simplifiedMesh) {
+          scene.remove(simplifiedMesh);
+          simplifiedMesh.geometry.dispose();
+          simplifiedMesh.material.dispose();
+        }
+        patchUndoStack.length = 0;
+        updatePatchUndoButton();
+
+        const simplifiedMaterial = new THREE.MeshStandardMaterial({
+          color: 0x4488ff,
+          side: THREE.DoubleSide,
+          wireframe: document.getElementById('show-wireframe').checked
+        });
+
+        simplifiedMesh = new THREE.Mesh(simplifiedGeometry, simplifiedMaterial);
+        simplifiedMesh.visible = document.getElementById('show-simplified').checked && activeTab === 'simplify';
+        scene.add(simplifiedMesh);
+        updatePatchVisibility();
+
+        const newTriCount = newIndexCount / 3;
+        const actualReduction = ((1 - newTriCount / originalTriCount) * 100).toFixed(1);
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        document.getElementById('comparison-stats').style.display = 'grid';
+        document.getElementById('compare-orig').textContent = Math.floor(originalTriCount).toLocaleString() + ' tris';
+        document.getElementById('compare-simplified').textContent = Math.floor(newTriCount).toLocaleString() + ' tris';
+        document.getElementById('stat-reduction').textContent = actualReduction + '% reduction';
+        document.getElementById('export-btn').disabled = false;
+
+        setProgress(100);
+        setStatus(`Simplified to ${Math.floor(newTriCount).toLocaleString()} triangles (${actualReduction}% reduction) in ${elapsed}s`);
+        setTimeout(() => setProgress(0), 1000);
+      } catch (err) {
+        console.error('Simplify error:', err);
+        setStatus('Error: ' + err.message);
+        setProgress(0);
+      }
+    };
+
+    window.toggleOriginal = function() {
+      if (originalMesh) {
+        originalMesh.visible = document.getElementById('show-original').checked;
+      }
+    };
+
+    window.toggleSimplified = function() {
+      if (simplifiedMesh) {
+        simplifiedMesh.visible = document.getElementById('show-simplified').checked;
+      }
+      if (patchPlane) {
+        updatePatchVisibility();
+      }
+    };
+
+    window.toggleWireframe = function() {
+      const wireframe = document.getElementById('show-wireframe').checked;
+      if (originalMesh) originalMesh.material.wireframe = wireframe;
+      if (simplifiedMesh) simplifiedMesh.material.wireframe = wireframe;
+    };
+
+    window.exportGLB = async function() {
+      if (!simplifiedMesh) {
+        setStatus('No simplified mesh to export.');
+        return;
+      }
+      setStatus('Exporting GLB...');
+      const exportScene = new THREE.Scene();
+      const exportMesh = simplifiedMesh.clone();
+      exportMesh.material = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+      exportScene.add(exportMesh);
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        exportScene,
+        (gltf) => {
+          const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'simplified-mesh.glb';
+          a.click();
+          URL.revokeObjectURL(url);
+          setStatus('Exported simplified-mesh.glb');
+        },
+        (error) => {
+          console.error('Export error:', error);
+          setStatus('Export failed. See console.');
+        },
+        { binary: true }
+      );
+    };
+
+    // ========== Resize & Render ==========
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    function animate() {
+      updateMovement();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    // Initialize UI labels
+    setTimeout(() => {
+      window.updatePatchSize();
+      window.updatePatchDistance();
+      window.updatePatchSpacing();
+      window.updateReductionValue();
+      window.updateSplatVoxelRes();
+      window.updateSplatFillRadius();
+      window.updateSplatOpacityThreshold();
+      window.updateSplatSampleRate();
+      updateSceneForTab();
+      updatePatchUndoButton();
+    }, 0);
+
+    // ========== Marching Cubes ==========
+    function marchingCubes(voxels, nx, ny, nz, bounds, voxelSize, isoLevel) {
+      const vertices = [];
+      const indices = [];
+      const vertexMap = new Map();
+
+      function getVoxel(ix, iy, iz) {
+        if (ix < 0 || ix >= nx || iy < 0 || iy >= ny || iz < 0 || iz >= nz) return 0;
+        return voxels[ix + iy * nx + iz * nx * ny];
+      }
+
+      function getPosition(ix, iy, iz) {
+        return new THREE.Vector3(
+          bounds.min.x + ix * voxelSize,
+          bounds.min.y + iy * voxelSize,
+          bounds.min.z + iz * voxelSize
+        );
+      }
+
+      function interpolateVertex(p1, p2, v1, v2) {
+        if (Math.abs(isoLevel - v1) < 0.00001) return p1.clone();
+        if (Math.abs(isoLevel - v2) < 0.00001) return p2.clone();
+        if (Math.abs(v1 - v2) < 0.00001) return p1.clone();
+        const t = (isoLevel - v1) / (v2 - v1);
+        return new THREE.Vector3().lerpVectors(p1, p2, t);
+      }
+
+      function addVertex(v) {
+        const key = `${v.x.toFixed(5)},${v.y.toFixed(5)},${v.z.toFixed(5)}`;
+        if (vertexMap.has(key)) {
+          return vertexMap.get(key);
+        }
+        const idx = vertices.length / 3;
+        vertices.push(v.x, v.y, v.z);
+        vertexMap.set(key, idx);
+        return idx;
+      }
+
+      for (let iz = 0; iz < nz - 1; iz++) {
+        for (let iy = 0; iy < ny - 1; iy++) {
+          for (let ix = 0; ix < nx - 1; ix++) {
+            const v = [
+              getVoxel(ix, iy, iz),
+              getVoxel(ix + 1, iy, iz),
+              getVoxel(ix + 1, iy, iz + 1),
+              getVoxel(ix, iy, iz + 1),
+              getVoxel(ix, iy + 1, iz),
+              getVoxel(ix + 1, iy + 1, iz),
+              getVoxel(ix + 1, iy + 1, iz + 1),
+              getVoxel(ix, iy + 1, iz + 1)
+            ];
+
+            let cubeIndex = 0;
+            for (let i = 0; i < 8; i++) {
+              if (v[i] > isoLevel) cubeIndex |= (1 << i);
+            }
+            if (cubeIndex === 0 || cubeIndex === 255) continue;
+
+            const p = [
+              getPosition(ix, iy, iz),
+              getPosition(ix + 1, iy, iz),
+              getPosition(ix + 1, iy, iz + 1),
+              getPosition(ix, iy, iz + 1),
+              getPosition(ix, iy + 1, iz),
+              getPosition(ix + 1, iy + 1, iz),
+              getPosition(ix + 1, iy + 1, iz + 1),
+              getPosition(ix, iy + 1, iz + 1)
+            ];
+
+            const edges = EDGE_TABLE[cubeIndex];
+            if (edges === 0) continue;
+
+            const edgeVertices = new Array(12);
+            if (edges & 1) edgeVertices[0] = interpolateVertex(p[0], p[1], v[0], v[1]);
+            if (edges & 2) edgeVertices[1] = interpolateVertex(p[1], p[2], v[1], v[2]);
+            if (edges & 4) edgeVertices[2] = interpolateVertex(p[2], p[3], v[2], v[3]);
+            if (edges & 8) edgeVertices[3] = interpolateVertex(p[3], p[0], v[3], v[0]);
+            if (edges & 16) edgeVertices[4] = interpolateVertex(p[4], p[5], v[4], v[5]);
+            if (edges & 32) edgeVertices[5] = interpolateVertex(p[5], p[6], v[5], v[6]);
+            if (edges & 64) edgeVertices[6] = interpolateVertex(p[6], p[7], v[6], v[7]);
+            if (edges & 128) edgeVertices[7] = interpolateVertex(p[7], p[4], v[7], v[4]);
+            if (edges & 256) edgeVertices[8] = interpolateVertex(p[0], p[4], v[0], v[4]);
+            if (edges & 512) edgeVertices[9] = interpolateVertex(p[1], p[5], v[1], v[5]);
+            if (edges & 1024) edgeVertices[10] = interpolateVertex(p[2], p[6], v[2], v[6]);
+            if (edges & 2048) edgeVertices[11] = interpolateVertex(p[3], p[7], v[3], v[7]);
+
+            const triData = TRI_TABLE[cubeIndex];
+            for (let i = 0; triData[i] !== -1; i += 3) {
+              const v0 = edgeVertices[triData[i]];
+              const v1 = edgeVertices[triData[i + 1]];
+              const v2 = edgeVertices[triData[i + 2]];
+              if (v0 && v1 && v2) {
+                const i0 = addVertex(v0);
+                const i1 = addVertex(v1);
+                const i2 = addVertex(v2);
+                indices.push(i0, i1, i2);
+              }
+            }
+          }
+        }
+      }
+
+      return { vertices, indices };
+    }
+
+    // Marching cubes lookup tables (standard tables)
+    const EDGE_TABLE = [
+      0x0, 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c, 0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
+      0x190, 0x99, 0x393, 0x29a, 0x596, 0x49f, 0x795, 0x69c, 0x99c, 0x895, 0xb9f, 0xa96, 0xd9a, 0xc93, 0xf99, 0xe90,
+      0x230, 0x339, 0x33, 0x13a, 0x636, 0x73f, 0x435, 0x53c, 0xa3c, 0xb35, 0x83f, 0x936, 0xe3a, 0xf33, 0xc39, 0xd30,
+      0x3a0, 0x2a9, 0x1a3, 0xaa, 0x7a6, 0x6af, 0x5a5, 0x4ac, 0xbac, 0xaa5, 0x9af, 0x8a6, 0xfaa, 0xea3, 0xda9, 0xca0,
+      0x460, 0x569, 0x663, 0x76a, 0x66, 0x16f, 0x265, 0x36c, 0xc6c, 0xd65, 0xe6f, 0xf66, 0x86a, 0x963, 0xa69, 0xb60,
+      0x5f0, 0x4f9, 0x7f3, 0x6fa, 0x1f6, 0xff, 0x3f5, 0x2fc, 0xdfc, 0xcf5, 0xfff, 0xef6, 0x9fa, 0x8f3, 0xbf9, 0xaf0,
+      0x650, 0x759, 0x453, 0x55a, 0x256, 0x35f, 0x55, 0x15c, 0xe5c, 0xf55, 0xc5f, 0xd56, 0xa5a, 0xb53, 0x859, 0x950,
+      0x7c0, 0x6c9, 0x5c3, 0x4ca, 0x3c6, 0x2cf, 0x1c5, 0xcc, 0xfcc, 0xec5, 0xdcf, 0xcc6, 0xbca, 0xac3, 0x9c9, 0x8c0,
+      0x8c0, 0x9c9, 0xac3, 0xbca, 0xcc6, 0xdcf, 0xec5, 0xfcc, 0xcc, 0x1c5, 0x2cf, 0x3c6, 0x4ca, 0x5c3, 0x6c9, 0x7c0,
+      0x950, 0x859, 0xb53, 0xa5a, 0xd56, 0xc5f, 0xf55, 0xe5c, 0x15c, 0x55, 0x35f, 0x256, 0x55a, 0x453, 0x759, 0x650,
+      0xaf0, 0xbf9, 0x8f3, 0x9fa, 0xef6, 0xfff, 0xcf5, 0xdfc, 0x2fc, 0x3f5, 0xff, 0x1f6, 0x6fa, 0x7f3, 0x4f9, 0x5f0,
+      0xb60, 0xa69, 0x963, 0x86a, 0xf66, 0xe6f, 0xd65, 0xc6c, 0x36c, 0x265, 0x16f, 0x66, 0x76a, 0x663, 0x569, 0x460,
+      0xca0, 0xda9, 0xea3, 0xfaa, 0x8a6, 0x9af, 0xaa5, 0xbac, 0x4ac, 0x5a5, 0x6af, 0x7a6, 0xaa, 0x1a3, 0x2a9, 0x3a0,
+      0xd30, 0xc39, 0xf33, 0xe3a, 0x936, 0x83f, 0xb35, 0xa3c, 0x53c, 0x435, 0x73f, 0x636, 0x13a, 0x33, 0x339, 0x230,
+      0xe90, 0xf99, 0xc93, 0xd9a, 0xa96, 0xb9f, 0x895, 0x99c, 0x69c, 0x795, 0x49f, 0x596, 0x29a, 0x393, 0x99, 0x190,
+      0xf00, 0xe09, 0xd03, 0xc0a, 0xb06, 0xa0f, 0x905, 0x80c, 0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0
+    ];
+
+    // Triangle table - for each cube configuration, list of edge indices forming triangles
+    // -1 terminates each configuration
+    const TRI_TABLE = [
+      [-1],
+      [0, 8, 3, -1],
+      [0, 1, 9, -1],
+      [1, 8, 3, 9, 8, 1, -1],
+      [1, 2, 10, -1],
+      [0, 8, 3, 1, 2, 10, -1],
+      [9, 2, 10, 0, 2, 9, -1],
+      [2, 8, 3, 2, 10, 8, 10, 9, 8, -1],
+      [3, 11, 2, -1],
+      [0, 11, 2, 8, 11, 0, -1],
+      [1, 9, 0, 2, 3, 11, -1],
+      [1, 11, 2, 1, 9, 11, 9, 8, 11, -1],
+      [3, 10, 1, 11, 10, 3, -1],
+      [0, 10, 1, 0, 8, 10, 8, 11, 10, -1],
+      [3, 9, 0, 3, 11, 9, 11, 10, 9, -1],
+      [9, 8, 10, 10, 8, 11, -1],
+      [4, 7, 8, -1],
+      [4, 3, 0, 7, 3, 4, -1],
+      [0, 1, 9, 8, 4, 7, -1],
+      [4, 1, 9, 4, 7, 1, 7, 3, 1, -1],
+      [1, 2, 10, 8, 4, 7, -1],
+      [3, 4, 7, 3, 0, 4, 1, 2, 10, -1],
+      [9, 2, 10, 9, 0, 2, 8, 4, 7, -1],
+      [2, 10, 9, 2, 9, 7, 2, 7, 3, 7, 9, 4, -1],
+      [8, 4, 7, 3, 11, 2, -1],
+      [11, 4, 7, 11, 2, 4, 2, 0, 4, -1],
+      [9, 0, 1, 8, 4, 7, 2, 3, 11, -1],
+      [4, 7, 11, 9, 4, 11, 9, 11, 2, 9, 2, 1, -1],
+      [3, 10, 1, 3, 11, 10, 7, 8, 4, -1],
+      [1, 11, 10, 1, 4, 11, 1, 0, 4, 7, 11, 4, -1],
+      [4, 7, 8, 9, 0, 11, 9, 11, 10, 11, 0, 3, -1],
+      [4, 7, 11, 4, 11, 9, 9, 11, 10, -1],
+      [9, 5, 4, -1],
+      [9, 5, 4, 0, 8, 3, -1],
+      [0, 5, 4, 1, 5, 0, -1],
+      [8, 5, 4, 8, 3, 5, 3, 1, 5, -1],
+      [1, 2, 10, 9, 5, 4, -1],
+      [3, 0, 8, 1, 2, 10, 4, 9, 5, -1],
+      [5, 2, 10, 5, 4, 2, 4, 0, 2, -1],
+      [2, 10, 5, 3, 2, 5, 3, 5, 4, 3, 4, 8, -1],
+      [9, 5, 4, 2, 3, 11, -1],
+      [0, 11, 2, 0, 8, 11, 4, 9, 5, -1],
+      [0, 5, 4, 0, 1, 5, 2, 3, 11, -1],
+      [2, 1, 5, 2, 5, 8, 2, 8, 11, 4, 8, 5, -1],
+      [10, 3, 11, 10, 1, 3, 9, 5, 4, -1],
+      [4, 9, 5, 0, 8, 1, 8, 10, 1, 8, 11, 10, -1],
+      [5, 4, 0, 5, 0, 11, 5, 11, 10, 11, 0, 3, -1],
+      [5, 4, 8, 5, 8, 10, 10, 8, 11, -1],
+      [9, 7, 8, 5, 7, 9, -1],
+      [9, 3, 0, 9, 5, 3, 5, 7, 3, -1],
+      [0, 7, 8, 0, 1, 7, 1, 5, 7, -1],
+      [1, 5, 3, 3, 5, 7, -1],
+      [9, 7, 8, 9, 5, 7, 10, 1, 2, -1],
+      [10, 1, 2, 9, 5, 0, 5, 3, 0, 5, 7, 3, -1],
+      [8, 0, 2, 8, 2, 5, 8, 5, 7, 10, 5, 2, -1],
+      [2, 10, 5, 2, 5, 3, 3, 5, 7, -1],
+      [7, 9, 5, 7, 8, 9, 3, 11, 2, -1],
+      [9, 5, 7, 9, 7, 2, 9, 2, 0, 2, 7, 11, -1],
+      [2, 3, 11, 0, 1, 8, 1, 7, 8, 1, 5, 7, -1],
+      [11, 2, 1, 11, 1, 7, 7, 1, 5, -1],
+      [9, 5, 8, 8, 5, 7, 10, 1, 3, 10, 3, 11, -1],
+      [5, 7, 0, 5, 0, 9, 7, 11, 0, 1, 0, 10, 11, 10, 0, -1],
+      [11, 10, 0, 11, 0, 3, 10, 5, 0, 8, 0, 7, 5, 7, 0, -1],
+      [11, 10, 5, 7, 11, 5, -1],
+      [10, 6, 5, -1],
+      [0, 8, 3, 5, 10, 6, -1],
+      [9, 0, 1, 5, 10, 6, -1],
+      [1, 8, 3, 1, 9, 8, 5, 10, 6, -1],
+      [1, 6, 5, 2, 6, 1, -1],
+      [1, 6, 5, 1, 2, 6, 3, 0, 8, -1],
+      [9, 6, 5, 9, 0, 6, 0, 2, 6, -1],
+      [5, 9, 8, 5, 8, 2, 5, 2, 6, 3, 2, 8, -1],
+      [2, 3, 11, 10, 6, 5, -1],
+      [11, 0, 8, 11, 2, 0, 10, 6, 5, -1],
+      [0, 1, 9, 2, 3, 11, 5, 10, 6, -1],
+      [5, 10, 6, 1, 9, 2, 9, 11, 2, 9, 8, 11, -1],
+      [6, 3, 11, 6, 5, 3, 5, 1, 3, -1],
+      [0, 8, 11, 0, 11, 5, 0, 5, 1, 5, 11, 6, -1],
+      [3, 11, 6, 0, 3, 6, 0, 6, 5, 0, 5, 9, -1],
+      [6, 5, 9, 6, 9, 11, 11, 9, 8, -1],
+      [5, 10, 6, 4, 7, 8, -1],
+      [4, 3, 0, 4, 7, 3, 6, 5, 10, -1],
+      [1, 9, 0, 5, 10, 6, 8, 4, 7, -1],
+      [10, 6, 5, 1, 9, 7, 1, 7, 3, 7, 9, 4, -1],
+      [6, 1, 2, 6, 5, 1, 4, 7, 8, -1],
+      [1, 2, 5, 5, 2, 6, 3, 0, 4, 3, 4, 7, -1],
+      [8, 4, 7, 9, 0, 5, 0, 6, 5, 0, 2, 6, -1],
+      [7, 3, 9, 7, 9, 4, 3, 2, 9, 5, 9, 6, 2, 6, 9, -1],
+      [3, 11, 2, 7, 8, 4, 10, 6, 5, -1],
+      [5, 10, 6, 4, 7, 2, 4, 2, 0, 2, 7, 11, -1],
+      [0, 1, 9, 4, 7, 8, 2, 3, 11, 5, 10, 6, -1],
+      [9, 2, 1, 9, 11, 2, 9, 4, 11, 7, 11, 4, 5, 10, 6, -1],
+      [8, 4, 7, 3, 11, 5, 3, 5, 1, 5, 11, 6, -1],
+      [5, 1, 11, 5, 11, 6, 1, 0, 11, 7, 11, 4, 0, 4, 11, -1],
+      [0, 5, 9, 0, 6, 5, 0, 3, 6, 11, 6, 3, 8, 4, 7, -1],
+      [6, 5, 9, 6, 9, 11, 4, 7, 9, 7, 11, 9, -1],
+      [10, 4, 9, 6, 4, 10, -1],
+      [4, 10, 6, 4, 9, 10, 0, 8, 3, -1],
+      [10, 0, 1, 10, 6, 0, 6, 4, 0, -1],
+      [8, 3, 1, 8, 1, 6, 8, 6, 4, 6, 1, 10, -1],
+      [1, 4, 9, 1, 2, 4, 2, 6, 4, -1],
+      [3, 0, 8, 1, 2, 9, 2, 4, 9, 2, 6, 4, -1],
+      [0, 2, 4, 4, 2, 6, -1],
+      [8, 3, 2, 8, 2, 4, 4, 2, 6, -1],
+      [10, 4, 9, 10, 6, 4, 11, 2, 3, -1],
+      [0, 8, 2, 2, 8, 11, 4, 9, 10, 4, 10, 6, -1],
+      [3, 11, 2, 0, 1, 6, 0, 6, 4, 6, 1, 10, -1],
+      [6, 4, 1, 6, 1, 10, 4, 8, 1, 2, 1, 11, 8, 11, 1, -1],
+      [9, 6, 4, 9, 3, 6, 9, 1, 3, 11, 6, 3, -1],
+      [8, 11, 1, 8, 1, 0, 11, 6, 1, 9, 1, 4, 6, 4, 1, -1],
+      [3, 11, 6, 3, 6, 0, 0, 6, 4, -1],
+      [6, 4, 8, 11, 6, 8, -1],
+      [7, 10, 6, 7, 8, 10, 8, 9, 10, -1],
+      [0, 7, 3, 0, 10, 7, 0, 9, 10, 6, 7, 10, -1],
+      [10, 6, 7, 1, 10, 7, 1, 7, 8, 1, 8, 0, -1],
+      [10, 6, 7, 10, 7, 1, 1, 7, 3, -1],
+      [1, 2, 6, 1, 6, 8, 1, 8, 9, 8, 6, 7, -1],
+      [2, 6, 9, 2, 9, 1, 6, 7, 9, 0, 9, 3, 7, 3, 9, -1],
+      [7, 8, 0, 7, 0, 6, 6, 0, 2, -1],
+      [7, 3, 2, 6, 7, 2, -1],
+      [2, 3, 11, 10, 6, 8, 10, 8, 9, 8, 6, 7, -1],
+      [2, 0, 7, 2, 7, 11, 0, 9, 7, 6, 7, 10, 9, 10, 7, -1],
+      [1, 8, 0, 1, 7, 8, 1, 10, 7, 6, 7, 10, 2, 3, 11, -1],
+      [11, 2, 1, 11, 1, 7, 10, 6, 1, 6, 7, 1, -1],
+      [8, 9, 6, 8, 6, 7, 9, 1, 6, 11, 6, 3, 1, 3, 6, -1],
+      [0, 9, 1, 11, 6, 7, -1],
+      [7, 8, 0, 7, 0, 6, 3, 11, 0, 11, 6, 0, -1],
+      [7, 11, 6, -1],
+      [7, 6, 11, -1],
+      [3, 0, 8, 11, 7, 6, -1],
+      [0, 1, 9, 11, 7, 6, -1],
+      [8, 1, 9, 8, 3, 1, 11, 7, 6, -1],
+      [10, 1, 2, 6, 11, 7, -1],
+      [1, 2, 10, 3, 0, 8, 6, 11, 7, -1],
+      [2, 9, 0, 2, 10, 9, 6, 11, 7, -1],
+      [6, 11, 7, 2, 10, 3, 10, 8, 3, 10, 9, 8, -1],
+      [7, 2, 3, 6, 2, 7, -1],
+      [7, 0, 8, 7, 6, 0, 6, 2, 0, -1],
+      [2, 7, 6, 2, 3, 7, 0, 1, 9, -1],
+      [1, 6, 2, 1, 8, 6, 1, 9, 8, 8, 7, 6, -1],
+      [10, 7, 6, 10, 1, 7, 1, 3, 7, -1],
+      [10, 7, 6, 1, 7, 10, 1, 8, 7, 1, 0, 8, -1],
+      [0, 3, 7, 0, 7, 10, 0, 10, 9, 6, 10, 7, -1],
+      [7, 6, 10, 7, 10, 8, 8, 10, 9, -1],
+      [6, 8, 4, 11, 8, 6, -1],
+      [3, 6, 11, 3, 0, 6, 0, 4, 6, -1],
+      [8, 6, 11, 8, 4, 6, 9, 0, 1, -1],
+      [9, 4, 6, 9, 6, 3, 9, 3, 1, 11, 3, 6, -1],
+      [6, 8, 4, 6, 11, 8, 2, 10, 1, -1],
+      [1, 2, 10, 3, 0, 11, 0, 6, 11, 0, 4, 6, -1],
+      [4, 11, 8, 4, 6, 11, 0, 2, 9, 2, 10, 9, -1],
+      [10, 9, 3, 10, 3, 2, 9, 4, 3, 11, 3, 6, 4, 6, 3, -1],
+      [8, 2, 3, 8, 4, 2, 4, 6, 2, -1],
+      [0, 4, 2, 4, 6, 2, -1],
+      [1, 9, 0, 2, 3, 4, 2, 4, 6, 4, 3, 8, -1],
+      [1, 9, 4, 1, 4, 2, 2, 4, 6, -1],
+      [8, 1, 3, 8, 6, 1, 8, 4, 6, 6, 10, 1, -1],
+      [10, 1, 0, 10, 0, 6, 6, 0, 4, -1],
+      [4, 6, 3, 4, 3, 8, 6, 10, 3, 0, 3, 9, 10, 9, 3, -1],
+      [10, 9, 4, 6, 10, 4, -1],
+      [4, 9, 5, 7, 6, 11, -1],
+      [0, 8, 3, 4, 9, 5, 11, 7, 6, -1],
+      [5, 0, 1, 5, 4, 0, 7, 6, 11, -1],
+      [11, 7, 6, 8, 3, 4, 3, 5, 4, 3, 1, 5, -1],
+      [9, 5, 4, 10, 1, 2, 7, 6, 11, -1],
+      [6, 11, 7, 1, 2, 10, 0, 8, 3, 4, 9, 5, -1],
+      [7, 6, 11, 5, 4, 10, 4, 2, 10, 4, 0, 2, -1],
+      [3, 4, 8, 3, 5, 4, 3, 2, 5, 10, 5, 2, 11, 7, 6, -1],
+      [7, 2, 3, 7, 6, 2, 5, 4, 9, -1],
+      [9, 5, 4, 0, 8, 6, 0, 6, 2, 6, 8, 7, -1],
+      [3, 6, 2, 3, 7, 6, 1, 5, 0, 5, 4, 0, -1],
+      [6, 2, 8, 6, 8, 7, 2, 1, 8, 4, 8, 5, 1, 5, 8, -1],
+      [9, 5, 4, 10, 1, 6, 1, 7, 6, 1, 3, 7, -1],
+      [1, 6, 10, 1, 7, 6, 1, 0, 7, 8, 7, 0, 9, 5, 4, -1],
+      [4, 0, 10, 4, 10, 5, 0, 3, 10, 6, 10, 7, 3, 7, 10, -1],
+      [7, 6, 10, 7, 10, 8, 5, 4, 10, 4, 8, 10, -1],
+      [6, 9, 5, 6, 11, 9, 11, 8, 9, -1],
+      [3, 6, 11, 0, 6, 3, 0, 5, 6, 0, 9, 5, -1],
+      [0, 11, 8, 0, 5, 11, 0, 1, 5, 5, 6, 11, -1],
+      [6, 11, 3, 6, 3, 5, 5, 3, 1, -1],
+      [1, 2, 10, 9, 5, 11, 9, 11, 8, 11, 5, 6, -1],
+      [0, 11, 3, 0, 6, 11, 0, 9, 6, 5, 6, 9, 1, 2, 10, -1],
+      [11, 8, 5, 11, 5, 6, 8, 0, 5, 10, 5, 2, 0, 2, 5, -1],
+      [6, 11, 3, 6, 3, 5, 2, 10, 3, 10, 5, 3, -1],
+      [5, 8, 9, 5, 2, 8, 5, 6, 2, 3, 8, 2, -1],
+      [9, 5, 6, 9, 6, 0, 0, 6, 2, -1],
+      [1, 5, 8, 1, 8, 0, 5, 6, 8, 3, 8, 2, 6, 2, 8, -1],
+      [1, 5, 6, 2, 1, 6, -1],
+      [1, 3, 6, 1, 6, 10, 3, 8, 6, 5, 6, 9, 8, 9, 6, -1],
+      [10, 1, 0, 10, 0, 6, 9, 5, 0, 5, 6, 0, -1],
+      [0, 3, 8, 5, 6, 10, -1],
+      [10, 5, 6, -1],
+      [11, 5, 10, 7, 5, 11, -1],
+      [11, 5, 10, 11, 7, 5, 8, 3, 0, -1],
+      [5, 11, 7, 5, 10, 11, 1, 9, 0, -1],
+      [10, 7, 5, 10, 11, 7, 9, 8, 1, 8, 3, 1, -1],
+      [11, 1, 2, 11, 7, 1, 7, 5, 1, -1],
+      [0, 8, 3, 1, 2, 7, 1, 7, 5, 7, 2, 11, -1],
+      [9, 7, 5, 9, 2, 7, 9, 0, 2, 2, 11, 7, -1],
+      [7, 5, 2, 7, 2, 11, 5, 9, 2, 3, 2, 8, 9, 8, 2, -1],
+      [2, 5, 10, 2, 3, 5, 3, 7, 5, -1],
+      [8, 2, 0, 8, 5, 2, 8, 7, 5, 10, 2, 5, -1],
+      [9, 0, 1, 5, 10, 3, 5, 3, 7, 3, 10, 2, -1],
+      [9, 8, 2, 9, 2, 1, 8, 7, 2, 10, 2, 5, 7, 5, 2, -1],
+      [1, 3, 5, 3, 7, 5, -1],
+      [0, 8, 7, 0, 7, 1, 1, 7, 5, -1],
+      [9, 0, 3, 9, 3, 5, 5, 3, 7, -1],
+      [9, 8, 7, 5, 9, 7, -1],
+      [5, 8, 4, 5, 10, 8, 10, 11, 8, -1],
+      [5, 0, 4, 5, 11, 0, 5, 10, 11, 11, 3, 0, -1],
+      [0, 1, 9, 8, 4, 10, 8, 10, 11, 10, 4, 5, -1],
+      [10, 11, 4, 10, 4, 5, 11, 3, 4, 9, 4, 1, 3, 1, 4, -1],
+      [2, 5, 1, 2, 8, 5, 2, 11, 8, 4, 5, 8, -1],
+      [0, 4, 11, 0, 11, 3, 4, 5, 11, 2, 11, 1, 5, 1, 11, -1],
+      [0, 2, 5, 0, 5, 9, 2, 11, 5, 4, 5, 8, 11, 8, 5, -1],
+      [9, 4, 5, 2, 11, 3, -1],
+      [2, 5, 10, 3, 5, 2, 3, 4, 5, 3, 8, 4, -1],
+      [5, 10, 2, 5, 2, 4, 4, 2, 0, -1],
+      [3, 10, 2, 3, 5, 10, 3, 8, 5, 4, 5, 8, 0, 1, 9, -1],
+      [5, 10, 2, 5, 2, 4, 1, 9, 2, 9, 4, 2, -1],
+      [8, 4, 5, 8, 5, 3, 3, 5, 1, -1],
+      [0, 4, 5, 1, 0, 5, -1],
+      [8, 4, 5, 8, 5, 3, 9, 0, 5, 0, 3, 5, -1],
+      [9, 4, 5, -1],
+      [4, 11, 7, 4, 9, 11, 9, 10, 11, -1],
+      [0, 8, 3, 4, 9, 7, 9, 11, 7, 9, 10, 11, -1],
+      [1, 10, 11, 1, 11, 4, 1, 4, 0, 7, 4, 11, -1],
+      [3, 1, 4, 3, 4, 8, 1, 10, 4, 7, 4, 11, 10, 11, 4, -1],
+      [4, 11, 7, 9, 11, 4, 9, 2, 11, 9, 1, 2, -1],
+      [9, 7, 4, 9, 11, 7, 9, 1, 11, 2, 11, 1, 0, 8, 3, -1],
+      [11, 7, 4, 11, 4, 2, 2, 4, 0, -1],
+      [11, 7, 4, 11, 4, 2, 8, 3, 4, 3, 2, 4, -1],
+      [2, 9, 10, 2, 7, 9, 2, 3, 7, 7, 4, 9, -1],
+      [9, 10, 7, 9, 7, 4, 10, 2, 7, 8, 7, 0, 2, 0, 7, -1],
+      [3, 7, 10, 3, 10, 2, 7, 4, 10, 1, 10, 0, 4, 0, 10, -1],
+      [1, 10, 2, 8, 7, 4, -1],
+      [4, 9, 1, 4, 1, 7, 7, 1, 3, -1],
+      [4, 9, 1, 4, 1, 7, 0, 8, 1, 8, 7, 1, -1],
+      [4, 0, 3, 7, 4, 3, -1],
+      [4, 8, 7, -1],
+      [9, 10, 8, 10, 11, 8, -1],
+      [3, 0, 9, 3, 9, 11, 11, 9, 10, -1],
+      [0, 1, 10, 0, 10, 8, 8, 10, 11, -1],
+      [3, 1, 10, 11, 3, 10, -1],
+      [1, 2, 11, 1, 11, 9, 9, 11, 8, -1],
+      [3, 0, 9, 3, 9, 11, 1, 2, 9, 2, 11, 9, -1],
+      [0, 2, 11, 8, 0, 11, -1],
+      [3, 2, 11, -1],
+      [2, 3, 8, 2, 8, 10, 10, 8, 9, -1],
+      [9, 10, 2, 0, 9, 2, -1],
+      [2, 3, 8, 2, 8, 10, 0, 1, 8, 1, 10, 8, -1],
+      [1, 10, 2, -1],
+      [1, 3, 8, 9, 1, 8, -1],
+      [0, 9, 1, -1],
+      [0, 3, 8, -1],
+      [-1]
+    ];
+  </script>
+</body>
+</html>

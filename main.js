@@ -251,16 +251,23 @@ console.log("  bgAudioUrl:", initialWorldData.bgAudioUrl);
 // Set initial world data for audio (so clicking audio toggle will play it)
 setCurrentWorldData(initialWorldData);
 
-// Set initial camera position from world data
-localFrame.position.fromArray(initialWorldData.position);
+// Set initial camera position from world data (default to origin if not specified)
+if (initialWorldData.position) {
+    localFrame.position.fromArray(initialWorldData.position);
+} else {
+    localFrame.position.set(0, 0, 0);
+}
 
 // Apply starting rotation from config (if specified), otherwise use world.json rotation
 if (config.world.startingCameraRotation) {
     const [x, y, z] = config.world.startingCameraRotation;
     // Set localFrame rotation (camera's world rotation = localFrame rotation since camera is a child)
     localFrame.rotation.set(x, y, z);
-} else {
+} else if (initialWorldData.rotation) {
     localFrame.quaternion.fromArray(initialWorldData.rotation);
+} else {
+    // Default rotation: identity (no rotation)
+    localFrame.quaternion.set(0, 0, 0, 1);
 }
 
 // ========== Controls & VR Setup ==========

@@ -8,6 +8,7 @@
 import theater from './theater/config.js';
 import demo from './demo/config.js';
 import helloworld from './helloworld/config.js';
+import bigworld from './bigworld/config.js';
 import sunken from './sunken/config.js';
 import worldship from './worldship/config.js';
 import codeverse from './codeverse/config.js';
@@ -17,6 +18,7 @@ export const presets = {
     theater,
     demo,
     helloworld,
+    bigworld,
     sunken,
     worldship,
     codeverse,

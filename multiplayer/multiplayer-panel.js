@@ -6,6 +6,7 @@
  */
 
 import * as SessionManager from './session-manager.js';
+import { handleYBotChatFromMultiplayer } from '../characters/ybot.js';
 
 let panelContainer = null;
 let panelContent = null;
@@ -390,6 +391,14 @@ function sendChatMessage() {
   chatInput.value = '';
 }
 
+function parseYBotMention(message) {
+  const trimmed = (message || '').trim();
+  const match = trimmed.match(/^@ybot\b[:,]?\s*(.*)$/i);
+  if (!match) return null;
+  const prompt = match[1]?.trim();
+  return prompt || null;
+}
+
 /**
  * Attach event listeners to session manager
  */
@@ -445,6 +454,11 @@ function attachEventListeners() {
   
   unsubscribers.push(SessionManager.onChat((data) => {
     addChatMessage(data.name, data.message, data.color, data.t);
+
+    const ybotPrompt = parseYBotMention(data.message);
+    if (ybotPrompt && SessionManager.isHosting()) {
+      handleYBotChatFromMultiplayer(ybotPrompt, data.name);
+    }
   }));
 }
 

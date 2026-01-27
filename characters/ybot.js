@@ -31,6 +31,7 @@ import {
 } from "../vr/vr-chat.js";
 import { onCinemaModeChange, offCinemaModeChange, captureFoundryFrame, isCinemaModeActive, getFoundryScreenPosition, getFoundryScreenRotation, getFoundryMovieConfig, getFoundryDisplayConfig, getFoundryDisplayType, isFoundryDisplayPaused, isFoundryConnected } from "../foundry-share.js";
 import { showSplatCommentary, hideSplatCommentary } from "../splat-dialog-box.js";
+import * as SessionManager from "../multiplayer/session-manager.js";
 
 const forwardDir = new THREE.Vector3();
 const targetDir = new THREE.Vector3();
@@ -488,6 +489,48 @@ function showCommentary(text, screenPosition = null, screenRotation = null, pane
     
     // Always use SplatDialogBox for 3D commentary display
     showSplatCommentary(text, CHARACTER_NAME, screenPosition, screenRotation, panelConfig);
+
+    // Also broadcast commentary to shared chat (host only)
+    if (SessionManager.inSession() && SessionManager.isHosting()) {
+        SessionManager.sendChat(`${CHARACTER_NAME} (commentary): ${text}`);
+    }
+}
+
+/**
+ * Handle Y-Bot chat from multiplayer panel (@ybot ...)
+ */
+export async function handleYBotChatFromMultiplayer(message, fromName = null) {
+    if (!SessionManager.inSession() || !SessionManager.isHosting()) return false;
+    if (!activeYBotInstance) return false;
+
+    const trimmedMessage = (message || '').trim();
+    if (!trimmedMessage) return false;
+
+    const userMessage = fromName ? `${fromName}: ${trimmedMessage}` : trimmedMessage;
+    conversationHistory.push({
+        role: 'user',
+        content: userMessage,
+    });
+
+    try {
+        const fullResponse = await getChatResponse({
+            characterName: CHARACTER_NAME,
+            userMessage,
+            conversationHistory,
+            slug: CHAT.promptSlug,
+        });
+
+        conversationHistory.push({
+            role: 'character',
+            content: fullResponse,
+        });
+
+        SessionManager.sendChat(`${CHARACTER_NAME}: ${fullResponse}`);
+        return true;
+    } catch (error) {
+        console.error(`[${CHARACTER_NAME}] Multiplayer chat error:`, error);
+        return false;
+    }
 }
 
 /**

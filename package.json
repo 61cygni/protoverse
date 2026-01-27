@@ -21,7 +21,9 @@
     "build:worldship": "VITE_PRESET=worldship vite build --mode worldship",
     "dev:sunken": "vite --mode sunken",
     "build:sunken": "vite build --mode sunken",
-    "build:splat2mesh": "node scripts/build-splat2mesh.js"
+    "build:splat2mesh": "node scripts/build-splat2mesh.js",
+    "dev:bigworld": "vite --mode bigworld",
+    "build:bigworld": "vite build --mode bigworld"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",
